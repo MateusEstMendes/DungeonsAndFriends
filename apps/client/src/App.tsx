@@ -1,0 +1,39 @@
+import { LobbyScreen } from "./components/lobby/LobbyScreen";
+import { WaitingRoomScreen } from "./components/lobby/WaitingRoomScreen";
+import { ApprovalQueuePopover } from "./components/master/ApprovalQueuePopover";
+import { leaveRoom } from "./network/colyseusClient";
+import { useGameStore } from "./store/useGameStore";
+import { useUIStore } from "./store/useUIStore";
+export function App() {
+  const screen = useUIStore(state => state.screen);
+  const notice = useUIStore(state => state.notice);
+  return <main>
+    {screen !== "LOBBY" && <ConnectionBar/>}
+    {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => useUIStore.setState({ notice: "" })}>×</button></div>}
+    {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : <RoomScreen/>}
+    <footer>Dungeons & Friends · v0.1.0</footer>
+  </main>;
+}
+function ConnectionBar() {
+  const roomCode = useGameStore(state => state.roomCode);
+  const role = useGameStore(state => state.role);
+  const connectionState = useGameStore(state => state.connectionState);
+  const latencyMs = useGameStore(state => state.latencyMs);
+  const connectionLabels = { DISCONNECTED: "Desconectado", CONNECTING: "Conectando…", CONNECTED: "Conectado", RECONNECTING: "Reconectando…" };
+  return <header className="topbar"><span>✦ Sala <strong>{roomCode}</strong></span><span role="status">{connectionLabels[connectionState]} {latencyMs !== null && `· ${latencyMs} ms`}</span>{role === "MASTER" && <ApprovalQueuePopover/>}</header>;
+}
+function RoomScreen() {
+  const role = useGameStore(state => state.role);
+  const roomCode = useGameStore(state => state.roomCode);
+  const playerName = useGameStore(state => state.playerName);
+  const players = useGameStore(state => state.players);
+  const game = { role, roomCode, playerName, players };
+  return <section className="panel room">
+      <span className="eyebrow">{game.role === "MASTER" ? "Mesa do Mestre" : "Entrada aprovada"}</span>
+      <h1>{game.role === "MASTER" ? "Sua mesa está pronta" : `Bem-vindo, ${game.playerName}`}</h1>
+      <p className="muted">{game.role === "MASTER" ? "Compartilhe o convite e aprove os aventureiros na fila de pedidos." : "Sua próxima etapa será criar um personagem. A criação de fichas chega na próxima fase."}</p>
+      {game.role === "MASTER" && <div className="invite"><label>Convite da sala<input readOnly value={`${location.origin}/?room=${game.roomCode}`} onFocus={event => event.target.select()}/></label><button onClick={() => { void navigator.clipboard?.writeText(`${location.origin}/?room=${game.roomCode}`).then(() => useUIStore.getState().setNotice("Convite copiado.")).catch(() => useUIStore.getState().setNotice("Selecione e copie o convite acima.")); }}>Copiar convite</button></div>}
+      <h2>Aventureiros na mesa</h2><ul className="roster">{game.players.filter(player => player.status !== "REJECTED").map(player => <li key={player.id}><span className={player.connected ? "dot online" : "dot"}/><strong>{player.name}</strong><small>{player.role === "MASTER" ? "Mestre" : player.status === "PENDING_APPROVAL" ? "Aguardando aprovação" : "Aprovado"} · {player.connected ? "Online" : "Offline"}</small></li>)}</ul>
+      <button onClick={() => void leaveRoom()}>Sair da sala</button>
+    </section>;
+}

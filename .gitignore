@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.tools/
+.pnpm-store/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+*.secret

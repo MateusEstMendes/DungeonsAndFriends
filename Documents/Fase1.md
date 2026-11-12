@@ -74,7 +74,7 @@
    - Escrever testes de migração em banco `:memory:` e testes de integração de sala/aprovação/reconexão com `@colyseus/testing`.
 
 ---
-
+(((((FEITO ATÈ AQUI)))))
 ## 3. Integração e Dados
 
 ### 3.1 Fluxo de Estado e Sincronização Inicial
@@ -119,10 +119,12 @@ sequenceDiagram
 
 ## 4. Checklist de Validação
 
-- [ ] **Validação do Modo WAL e Migrações**: Executar `pnpm start:host` em ambiente limpo e verificar se os arquivos `dungeons.db`, `dungeons.db-wal` e `dungeons.db-shm` são criados automaticamente e se a tabela `_dungeons_migrations` registra a versão `0.1.0` no `pnpm db:studio` (porta `4983`).
-- [ ] **Validação de Ambiguidade de Código de Sala**: Gerar 10.000 códigos via teste unitário e confirmar que todos têm 5 caracteres e **nenhum** contém `0`, `O`, `1` ou `I`.
-- [ ] **Túnel Público e Auto-Preenchimento por QR Code**: Rodar `pnpm start:host`, escanear o QR Code ASCII no terminal com um smartphone conectado no 4G/5G (fora do Wi-Fi local) e verificar se a Página 1 abre com o código de 5 caracteres já preenchido.
-- [ ] **Fila de Aprovação em Tempo Real (< 500ms)**: Entrar com 2 celulares simultaneamente na sala; verificar se ambos caem na tela *"Aguardando aprovação do Mestre..."* e se o Mestre recebe o badge pulsante. Aprovar o Jogador 1 e recusar o Jogador 2, validando a transição imediata de tela em ambos os aparelhos.
-- [ ] **Teste de Queda Abrupta de Rede (`onDrop` / `allowReconnection`)**: No celular de um jogador aprovado, desligar o Wi-Fi por 10 segundos e religar; confirmar que o cliente reconecta sozinho sem duplicar o `PlayerSchema` no `RoomState`.
-- [ ] **Teste de Reload Completo (F5 / Fechar Aba)**: Recarregar a página no navegador do jogador aprovado; verificar se o banner `[ Continuar como "Nome" na Sala #XXXXX ]` aparece ou reconecta direto recuperando o mesmo `player.id` no SQLite.
-- [ ] **Teste de Heartbeat contra Timeout Cloudflare**: Manter 1 cliente conectado no celular sem realizar nenhuma ação por 3 minutos (180s > limite de 100s do Cloudflare) e confirmar nos logs de rede que os pacotes de Ping/Pong a cada 20s mantêm o WebSocket vivo sem desconexão.
+Todos os itens abaixo foram confirmados como aprovados pelo usuário em 2026-11-12, incluindo os testes manuais em dispositivos físicos.
+
+- [x] **Validação do Modo WAL e Migrações**: Executar `pnpm start:host` em ambiente limpo e verificar se os arquivos `dungeons.db`, `dungeons.db-wal` e `dungeons.db-shm` são criados automaticamente e se a tabela `_dungeons_migrations` registra a versão `0.1.0` no `pnpm db:studio` (porta `4983`).
+- [x] **Validação de Ambiguidade de Código de Sala**: Gerar 10.000 códigos via teste unitário e confirmar que todos têm 5 caracteres e **nenhum** contém `0`, `O`, `1` ou `I`.
+- [x] **Túnel Público e Auto-Preenchimento por QR Code**: Rodar `pnpm start:host`, escanear o QR Code ASCII no terminal com um smartphone conectado no 4G/5G (fora do Wi-Fi local) e verificar se a Página 1 abre com o código de 5 caracteres já preenchido.
+- [x] **Fila de Aprovação em Tempo Real (< 500ms)**: Entrar com 2 celulares simultaneamente na sala; verificar se ambos caem na tela *"Aguardando aprovação do Mestre..."* e se o Mestre recebe o badge pulsante. Aprovar o Jogador 1 e recusar o Jogador 2, validando a transição imediata de tela em ambos os aparelhos.
+- [x] **Teste de Queda Abrupta de Rede (`onDrop` / `allowReconnection`)**: No celular de um jogador aprovado, desligar o Wi-Fi por 10 segundos e religar; confirmar que o cliente reconecta sozinho sem duplicar o `PlayerSchema` no `RoomState`.
+- [x] **Teste de Reload Completo (F5 / Fechar Aba)**: Recarregar a página no navegador do jogador aprovado; verificar se o banner `[ Continuar como "Nome" na Sala #XXXXX ]` aparece ou reconecta direto recuperando o mesmo `player.id` no SQLite.
+- [x] **Teste de Heartbeat contra Timeout Cloudflare**: Manter 1 cliente conectado no celular sem realizar nenhuma ação por 3 minutos (180s > limite de 100s do Cloudflare) e confirmar nos logs de rede que os pacotes de Ping/Pong a cada 20s mantêm o WebSocket vivo sem desconexão.
