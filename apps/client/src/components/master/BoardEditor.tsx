@@ -1,0 +1,31 @@
+import { useState } from "react";
+import { TERRAIN_TYPES } from "@df/shared";
+import { boardCommand } from "../../network/colyseusClient";
+import { useBoardStore } from "../../store/useBoardStore";
+import { useGameStore } from "../../store/useGameStore";
+const terrainNames = { STONE: "Pedra", GRASS: "Grama", DIRT: "Terra", SAND: "Areia", WATER: "Água rasa (2 passos)", DEEP_WATER: "Água profunda", OBSTACLE: "Obstáculo opaco" };
+export function BoardEditor() {
+  const board = useBoardStore(), players = useGameStore(s => s.players);
+  const selected = [...players.filter(p => p.status === "READY"), ...board.monsters, ...board.objects].find(e => e.id === board.selectedEntityId);
+  const overlapped = selected ? [...board.objects, ...board.monsters, ...players.filter(p => p.status === "READY")].filter(e => e.currentChamberId === selected.currentChamberId && e.q === selected.q && e.r === selected.r) : [];
+  const [q, setQ] = useState("0"), [r, setR] = useState("0");
+  const set = useBoardStore.setState;
+  return <aside className="editor-hud board-glass" aria-label="Editor do Mestre"><details open><summary>Ferramentas do Mestre</summary>
+    <label>Ritmo da aventura<select value={board.explorationMode} onChange={e => boardCommand("SET_EXPLORATION_MODE", e.target.value)}><option value="DUNGEON_TENSE_30S">Modo Tenso · 30s</option><option value="FREE_EXPLORATION">Modo Livre</option></select></label>
+    <div className="editor-row"><button onClick={() => set(s => ({ macro: !s.macro }))}>{board.macro ? "Focar Câmara" : "Visão Macro Panorâmica"}</button></div>
+    <div className="editor-row"><button title="Ctrl+Z" onClick={() => boardCommand("MASTER_UNDO")}>↶ Undo</button><button title="Ctrl+Y" onClick={() => boardCommand("MASTER_REDO")}>↷ Redo</button></div>
+    <label>Fase reutilizável<select value={board.activeStageId} onChange={e => boardCommand("MASTER_SET_STAGE", e.target.value)}>{[...new Set(board.chambers.map(c => c.mapId))].map(id => <option key={id} value={id}>{id === "training" ? "Masmorra de Treinamento" : id}</option>)}</select></label>
+    <label>Câmara<select value={board.focusChamberId || board.chambers.find(c => c.mapId === board.activeStageId)?.id || ""} onChange={e => set({ focusChamberId: e.target.value })}>{board.chambers.filter(c => c.mapId === board.activeStageId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+    <div className="editor-tools" aria-label="Camada de edição">{([ ["SELECT", "Selecionar"], ["TERRAIN", "Terreno"], ["WALL", "Paredes"], ["OBJECT", "Objetos"], ["ENTITY", "Entidades"] ] as const).map(([tool, name]) => <button key={tool} aria-pressed={board.tool === tool} onClick={() => set({ tool })}>{name}</button>)}</div>
+    {board.tool === "TERRAIN" && <label>Terreno<select value={board.terrain} onChange={e => set({ terrain: e.target.value as typeof board.terrain })}>{TERRAIN_TYPES.map(t => <option key={t} value={t}>{terrainNames[t]}</option>)}</select></label>}
+    {board.tool === "WALL" && <><label>Aresta<select value={board.wallDirection} onChange={e => set({ wallDirection: Number(e.target.value) })}>{["Leste", "Nordeste", "Noroeste", "Oeste", "Sudoeste", "Sudeste"].map((name, i) => <option key={name} value={i}>{name}</option>)}</select></label><label className="check-label"><input type="checkbox" checked={board.eraseWall} onChange={e => set({ eraseWall: e.target.checked })}/>Apagar parede</label></>}
+    {board.tool === "OBJECT" && <><label>Objeto<select value={board.objectKind} onChange={e => set({ objectKind: e.target.value })}>{[["CHEST", "Baú"], ["TABLE", "Mesa"], ["CHAIR", "Cadeira"], ["DOOR", "Porta"], ["TORCH", "Tocha"]].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>Rotação<select value={board.rotation} onChange={e => set({ rotation: Number(e.target.value) })}>{[0, 60, 120, 180, 240, 300].map(n => <option key={n} value={n}>{n}°</option>)}</select></label></>}
+    {(board.tool === "OBJECT" || board.tool === "ENTITY") && <label className="check-label"><input type="checkbox" checked={board.hidden} onChange={e => set({ hidden: e.target.checked })}/>Oculto para jogadores</label>}
+    <p className="board-hint">{board.tool === "SELECT" ? "Arraste um token para reposicioná-lo. Toque para selecionar; toque novamente para alternar sobrepostos." : board.tool === "OBJECT" ? "Toque para colocar. Cada hexágono aceita um objeto de cada tipo." : "Toque no hexágono para aplicar. Terreno expande as bordas."}</p>
+    {selected && <section className="entity-inspector"><strong>{selected.name} · ({selected.q}, {selected.r})</strong><label>Entidades neste hexágono<select value={board.selectedEntityId} onChange={e => set({ selectedEntityId: e.target.value })}>{overlapped.map(e => <option key={e.id} value={e.id}>{e.name}{e.isHiddenByMaster ? " · Oculto" : ""}</option>)}</select></label>
+      {"kind" in selected && <button onClick={() => boardCommand("MASTER_ROTATE_OBJECT", { entityId: selected.id, rotation: ((selected.rotation ?? 0) + 60) % 360 })}>Girar 60°</button>}
+      {!("status" in selected) && <div className="editor-row"><button onClick={() => boardCommand("MASTER_SET_HIDDEN", { entityId: selected.id, hidden: !selected.isHiddenByMaster })}>{selected.isHiddenByMaster ? "Revelar" : "Ocultar"}</button><button onClick={() => boardCommand("MASTER_DELETE_ENTITY", { entityId: selected.id })}>Remover</button></div>}
+      <form className="coordinate-form" onSubmit={e => { e.preventDefault(); boardCommand("MASTER_MOVE_ENTITY", { entityId: selected.id, chamberId: board.focusChamberId || selected.currentChamberId, q: Number(q), r: Number(r) }); }}><label>q<input type="number" min={-200} max={200} required value={q} onChange={e => setQ(e.target.value)}/></label><label>r<input type="number" min={-200} max={200} required value={r} onChange={e => setR(e.target.value)}/></label><button>Mover</button></form>
+    </section>}
+  </details></aside>;
+}

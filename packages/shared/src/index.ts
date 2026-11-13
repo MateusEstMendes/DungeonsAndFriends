@@ -6,3 +6,8 @@ export * from "./rules/pointBuy.js";
 export * from "./rules/races.js";
 export * from "./rules/classes.js";
 export * from "./rules/stats.js";
+export * from "./hex/index.js";
+export * from "./schema/ChamberSchema.js";
+export * from "./schema/MonsterSchema.js";
+export * from "./schema/PlacedObjectSchema.js";
+export * from "./schema/boardPackets.js";

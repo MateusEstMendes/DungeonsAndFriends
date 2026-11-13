@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { ApprovalStatus, PlayerRole, SessionStatus } from "@df/shared";
-export interface Player { id: string; name: string; role: PlayerRole; status: ApprovalStatus; connected: boolean; characterId:string; characterName:string; raceId:string; archetypeId:string; hp:number; maxHp:number; mp:number; maxMp:number; defense:number; speed:number; tokenUrl:string; portraitUrl:string }
+export interface Player { id: string; name: string; role: PlayerRole; status: ApprovalStatus; connected: boolean; characterId:string; characterName:string; raceId:string; archetypeId:string; hp:number; maxHp:number; mp:number; maxMp:number; defense:number; speed:number; tokenUrl:string; portraitUrl:string; currentChamberId: string; q: number; r: number; moveCooldownEndsAt: number; remainingSteps: number; moveRevision: number; isHiddenByMaster: boolean }
 export type ConnectionState = "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "RECONNECTING";
 interface GameState {
   roomCode: string; playerId: string; playerName: string;

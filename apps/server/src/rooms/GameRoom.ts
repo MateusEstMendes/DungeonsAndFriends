@@ -6,6 +6,11 @@ import type { openDatabase } from "../db/index.js";
 import { ensureActiveSession } from "../db/session.js";
 import { characters, players, rooms } from "../db/schema.js";
 import { prepareCharacter, maskIp, signSessionToken, validateSessionToken, verifyPassword } from "./handlers/auth.js";
+import { StateView } from "@colyseus/schema";
+import { FovService } from "../services/fovService.js";
+import { loadBoard, readBoard } from "../services/boardRepository.js";
+import { MovementHandler } from "./handlers/movement.js";
+import { MasterHandler } from "./handlers/master.js";
 
 type Database = ReturnType<typeof openDatabase>;
 export interface RoomServices { database: Database; tokenSecret: string; bootstrapKey: string }
@@ -17,6 +22,8 @@ export class GameRoom extends Room<{ state: RoomState }> {
   private ips = new Map<string, string>();
   private heartbeats = new Map<string, number>();
   private authAttempts = new Map<string, { count: number; resetAt: number }>();
+  private fov!: FovService;
+  private movement!: MovementHandler;
   constructor(private readonly services: RoomServices) { super(); }
 
   onCreate(options: { bootstrapKey?: string; roomCode?: string }) {
@@ -31,12 +38,38 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.setState(new RoomState());
     this.state.roomCode = record.code;
     this.state.sessionStatus = record.status;
+    this.state.activeStageId = record.activeStageId;
+    this.state.explorationMode = record.explorationMode;
+    loadBoard(this.state, readBoard(this.services.database));
+    this.fov = new FovService(this.state);
+    this.movement = new MovementHandler(this.state, this.services.database, () => this.refreshViews());
     for (const saved of this.services.database.db.select().from(players).where(eq(players.roomId, record.id)).all()) {
       const player = new PlayerSchema();
       Object.assign(player, { id: saved.id, name: saved.name, role: saved.id === record.id ? "MASTER" : "PLAYER", status: saved.approvalStatus === "APPROVED" && saved.id !== record.id ? "NEEDS_CHARACTER_CREATION" : saved.approvalStatus, connected: false });
       this.restoreCharacter(player, saved.characterId);
       this.state.players.set(player.id, player);
+      if (player.status === "READY") this.movement.spawn(player);
     }
+    const master = new MasterHandler(this.state, this.services.database, record.id, this.movement, () => this.refreshViews());
+    const command = (name: string, masterOnly: boolean, action: (player: PlayerSchema, input: unknown) => void) => {
+      this.onMessage(name, (client, input) => {
+        const player = this.state.players.get(this.bindings.get(client.sessionId) ?? "");
+        if (!player || (masterOnly && player.role !== "MASTER")) { client.send("ACTION_ERROR", "Ação não autorizada."); return; }
+        try { action(player, input); }
+        catch (error) { client.send("ACTION_ERROR", error instanceof Error && error.name !== "ZodError" ? error.message : "Comando inválido."); }
+      });
+    };
+    command("REQUEST_MOVE", false, (p, input) => this.movement.request(p, input));
+    command("END_MOVEMENT", false, p => this.movement.endTurn(p));
+    command("MASTER_MOVE_ENTITY", true, (_p, input) => master.move(input));
+    command("MASTER_ROTATE_OBJECT", true, (_p, input) => master.rotate(input));
+    command("MASTER_EDIT", true, (_p, input) => master.edit(input));
+    command("MASTER_SET_HIDDEN", true, (_p, input) => master.hidden(input));
+    command("MASTER_DELETE_ENTITY", true, (_p, input) => master.remove(input));
+    command("MASTER_UNDO", true, () => master.history(false));
+    command("MASTER_REDO", true, () => master.history(true));
+    command("SET_EXPLORATION_MODE", true, (_p, input) => master.mode(input));
+    command("MASTER_SET_STAGE", true, (_p, input) => master.stage(input));
     this.onMessage("SUBMIT_CHARACTER", (client, input) => this.submitCharacter(client, input));
     this.onMessage("APPROVE_PLAYER", (client, input) => this.decide(client, input, true));
     this.onMessage("REJECT_PLAYER", (client, input) => this.decide(client, input, false));
@@ -97,6 +130,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
   }
 
   onJoin(client: Client, _options: unknown, auth: Identity) {
+    client.view = new StateView();
     // Um único socket por identidade, inclusive durante a janela de reconexão.
     if (Array.from(this.bindings.values()).includes(auth.playerId)) throw new ServerError(409, "Este jogador já está conectado. Aguarde a reconexão.");
     const { db } = this.services.database;
@@ -112,6 +146,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     player.connected = true;
     db.update(players).set({ sessionToken: auth.sessionToken, reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client, auth.sessionToken, player);
+    this.refreshViews();
     this.log("join", client);
   }
 
@@ -129,6 +164,8 @@ export class GameRoom extends Room<{ state: RoomState }> {
       mp: character.mp, maxMp: character.maxMp, defense: character.defense, speed: character.speed,
       portraitUrl: `data:image/webp;base64,${character.portraitWebp}`,
       tokenUrl: `data:image/webp;base64,${character.tokenWebp}`, status: "READY",
+      currentChamberId: character.currentChamberId, q: character.posQ, r: character.posR,
+      moveCooldownEndsAt: character.moveCooldownEndsAt, remainingSteps: character.remainingSteps,
     });
   }
 
@@ -160,6 +197,8 @@ export class GameRoom extends Room<{ state: RoomState }> {
         return created;
       });
       this.syncCharacter(player, character);
+      this.movement.spawn(player);
+      this.refreshViews();
     } catch {
       client.send("ACTION_ERROR", "Não foi possível salvar a ficha. Tente novamente.");
     }
@@ -178,6 +217,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
       db.update(players).set({ approvalStatus: approve ? "APPROVED" : "REJECTED", ...(sessionToken ? { sessionToken } : {}), lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     });
     player.status = status;
+    this.refreshViews();
     for (const target of this.clients) if (this.bindings.get(target.sessionId) === player.id) {
       target.send("APPROVAL_RESULT", status);
       if (approve) this.credentials(target);
@@ -188,6 +228,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
   async onDrop(client: Client) {
     const player = this.state.players.get(this.bindings.get(client.sessionId)!);
     if (player) player.connected = false;
+    this.refreshViews();
     this.log("drop", client);
     try { await this.allowReconnection(client, 60); } catch { /* onLeave faz a limpeza definitiva */ }
   }
@@ -195,6 +236,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     const player = this.state.players.get(this.bindings.get(client.sessionId)!);
     if (!player) return;
     player.connected = true;
+    this.refreshViews();
     this.services.database.db.update(players).set({ reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client);
     this.log("reconnect", client);
@@ -215,7 +257,10 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.bindings.delete(client.sessionId);
     this.ips.delete(client.sessionId);
     this.heartbeats.delete(client.sessionId);
+    this.refreshViews();
+    client.view?.dispose();
   }
+  private refreshViews() { this.fov.refresh(this.clients, client => this.bindings.get(client.sessionId)); }
   private log(event: string, client: Client, rttMs?: number) {
     console.log(JSON.stringify({ timestamp: new Date().toISOString(), event, roomCode: this.roomId, ip: this.ips.get(client.sessionId) ?? "unknown", rttMs: rttMs ?? null }));
   }

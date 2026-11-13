@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 const CharacterCreatorScreen = lazy(() => import("./components/character/CharacterCreatorScreen").then(module => ({ default: module.CharacterCreatorScreen })));
+const BoardScreen = lazy(() => import("./components/BoardScreen").then(module => ({ default: module.BoardScreen })));
 import { LobbyScreen } from "./components/lobby/LobbyScreen";
 import { WaitingRoomScreen } from "./components/lobby/WaitingRoomScreen";
 import { ApprovalQueuePopover } from "./components/master/ApprovalQueuePopover";
@@ -13,8 +14,8 @@ export function App() {
   return <main>
     {screen !== "LOBBY" && <ConnectionBar/>}
     {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => useUIStore.setState({ notice: "" })}>×</button></div>}
-    {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : own?.status === "NEEDS_CHARACTER_CREATION" && !own.characterId ? <Suspense fallback={<p role="status">Preparando criação de personagem…</p>}><CharacterCreatorScreen key={own.id}/></Suspense> : <RoomScreen/>}
-    <footer>Dungeons & Friends · v0.2.0</footer>
+    {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : own?.status === "NEEDS_CHARACTER_CREATION" && !own.characterId ? <Suspense fallback={<p role="status">Preparando criação de personagem…</p>}><CharacterCreatorScreen key={own.id}/></Suspense> : own?.role === "MASTER" || own?.status === "READY" ? <Suspense fallback={<p role="status">Preparando tabuleiro…</p>}><BoardScreen/></Suspense> : <RoomScreen/>}
+    <footer>Dungeons & Friends · v0.3.0</footer>
   </main>;
 }
 function ConnectionBar() {

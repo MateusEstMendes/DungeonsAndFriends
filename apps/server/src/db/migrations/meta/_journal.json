@@ -15,6 +15,13 @@
       "when": 1794522114583,
       "tag": "0001_add_characters_table",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794600000000,
+      "tag": "0002_add_maps_and_chambers",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 # Fase 5 — Economia, Itens, NPCs e IA Tática dos Monstros (`v0.5.0`)
 
 ## 1. Escopo de Sistemas
+IMPORTANTE, TEMOS EXEMPLOS DOS SPRITES DE ARMAS E ARMADURAS DENTRO DE DESIGNEX, com suas proprias pastas cada
 
 ### 1.1 Regras de Equipamentos, Consumíveis e Feitiços (`packages/shared/src/rules`) (Criar / Modificar)
 - `packages/shared/src/rules/items.ts` (Criar):

@@ -1,15 +1,16 @@
 {
   "name": "dungeons-and-friends",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "packageManager": "pnpm@12.16.1",
   "engines": {
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "pnpm --filter @df/shared build && pnpm --parallel --filter './apps/*' dev",
+    "dev": "pnpm --filter @df/shared build && pnpm --parallel --filter @df/client --filter @df/server run dev",
     "build": "pnpm -r build",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "typecheck": "pnpm -r typecheck",
     "db:generate": "pnpm --filter @df/server db:generate",
     "db:migrate": "pnpm --filter @df/server db:migrate",
@@ -17,8 +18,9 @@
     "start:host": "pnpm build && pnpm --filter @df/server start:host"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.0.0",
     "typescript": "~5.7.3",
-    "vitest": "^4.0.0",
-    "@types/node": "^24.0.0"
+    "vitest": "^4.0.0"
   }
 }

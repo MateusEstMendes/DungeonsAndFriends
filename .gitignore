@@ -9,3 +9,6 @@ dist/
 .env.*
 !.env.example
 *.secret
+.local/
+test-results/
+playwright-report/

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Encoder, Decoder } from "@colyseus/schema";
+import { Encoder, Decoder, StateView } from "@colyseus/schema";
 import {
   ApprovalDecisionPayloadSchema, JoinRequestPayloadSchema,
   MasterAuthPayloadSchema, PlayerSchema, PROTOCOL_VERSION,
@@ -35,14 +35,17 @@ describe("estado sincronizado", () => {
     player.name = "Ana";
     state.players.set(player.id, player);
     const encoder = new Encoder(state);
+    const view = new StateView(); view.add(player);
     const received = new RoomState();
     const decoder = new Decoder(received);
-    decoder.decode(encoder.encodeAll());
+    const full = encoder.encodeAll();
+    decoder.decode(encoder.encodeAllView(view, full.byteLength, { offset: full.byteLength }));
     expect(received.players.get(player.id)?.status).toBe("PENDING_APPROVAL");
     encoder.discardChanges();
     player.status = "NEEDS_CHARACTER_CREATION";
     player.connected = true;
-    decoder.decode(encoder.encode());
+    const it = { offset: 0 }; encoder.encode(it);
+    decoder.decode(encoder.encodeView(view, it.offset, { offset: it.offset }));
     expect(received.players.get(player.id)?.status).toBe("NEEDS_CHARACTER_CREATION");
     expect(received.players.get(player.id)?.connected).toBe(true);
   });

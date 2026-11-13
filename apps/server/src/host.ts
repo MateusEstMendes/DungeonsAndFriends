@@ -15,7 +15,7 @@ export function prepareHost(database: ReturnType<typeof openDatabase>, password 
   if (!room) {
     let code = generateRoomCode();
     while (db.select().from(rooms).where(eq(rooms.code, code)).get()) code = generateRoomCode();
-    room = { id: randomUUID(), code, masterPasswordHash: hashPassword(password), status: "LOBBY", createdAt: Date.now() };
+    room = { id: randomUUID(), code, masterPasswordHash: hashPassword(password), activeStageId: "training", explorationMode: "DUNGEON_TENSE_30S", status: "LOBBY", createdAt: Date.now() };
     db.insert(rooms).values(room).run();
   } else if (!verifyPassword(password, room.masterPasswordHash)) {
     room.masterPasswordHash = hashPassword(password);

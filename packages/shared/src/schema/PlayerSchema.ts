@@ -1,4 +1,4 @@
-import { Schema, type } from "@colyseus/schema";
+import { Schema, type, view } from "@colyseus/schema";
 import type { ApprovalStatus, PlayerRole } from "../constants.js";
 
 // Somente estado público: senhas e tokens nunca entram no estado sincronizado.
@@ -20,4 +20,11 @@ export class PlayerSchema extends Schema {
   @type("number") defense = 0;
   @type("number") speed = 0;
   @type("boolean") connected = false;
+  @view() @type("string") currentChamberId = "";
+  @view() @type("number") q = 0;
+  @view() @type("number") r = 0;
+  @view() @type("boolean") isHiddenByMaster = false;
+  @type("number") moveCooldownEndsAt = 0;
+  @type("number") remainingSteps = 0;
+  @type("number") moveRevision = 0;
 }

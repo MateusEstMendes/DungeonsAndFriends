@@ -2,6 +2,7 @@ import { Client, type Room } from "@colyseus/sdk";
 import { PROTOCOL_VERSION, RoomCodeSchema, SessionCredentialsPayloadSchema, type RoomState, type CharacterCreationPayload, type ApprovalStatus } from "@df/shared";
 import { initialGameState, useGameStore } from "../store/useGameStore";
 import { useUIStore } from "../store/useUIStore";
+import { initialBoardState, useBoardStore } from "../store/useBoardStore";
 
 import { savedSession, persistCredentials, persistReconnectionToken, clearSession } from "./sessionPersistence";
 export { savedSession } from "./sessionPersistence";
@@ -29,14 +30,16 @@ function attach(room: Room<unknown, RoomState>) {
   let lastPlayers = "";
   let networkErrorNotice: string | undefined;
   const sync = (state: RoomState) => {
-    const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected, characterId:player.characterId, characterName:player.characterName, raceId:player.raceId, archetypeId:player.archetypeId, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, defense:player.defense, speed:player.speed, tokenUrl:player.tokenUrl, portraitUrl:player.portraitUrl }));
+    const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected, characterId:player.characterId, characterName:player.characterName, raceId:player.raceId, archetypeId:player.archetypeId, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, defense:player.defense, speed:player.speed, tokenUrl:player.tokenUrl, portraitUrl:player.portraitUrl, currentChamberId:player.currentChamberId, q:player.q, r:player.r, moveCooldownEndsAt:player.moveCooldownEndsAt, remainingSteps:player.remainingSteps, moveRevision:player.moveRevision, isHiddenByMaster:player.isHiddenByMaster }));
     const serialized = JSON.stringify(players);
     if (serialized !== lastPlayers) { lastPlayers = serialized; useGameStore.setState({ players }); }
     const own = state.players.get(useGameStore.getState().playerId);
     if (own) screenFor(own.status);
     if (useGameStore.getState().sessionStatus !== state.sessionStatus) useGameStore.setState({ sessionStatus: state.sessionStatus });
+    useBoardStore.setState({ chambers: [...state.chambers.values()].map(c => c.toJSON()), monsters: [...state.monsters.values()].map(m => m.toJSON()), objects: [...state.objects.values()].map(o => o.toJSON()), activeStageId: state.activeStageId, explorationMode: state.explorationMode });
   };
   room.onStateChange(sync);
+  room.onMessage("ACTIVE_VISION", (data: { chamberId: string; cells: string[] }) => useBoardStore.setState({ visionChamberId: data.chamberId, activeVision: data.cells }));
   room.onMessage("SESSION_CREDENTIALS", (input: unknown) => {
     const parsed = SessionCredentialsPayloadSchema.safeParse(input);
     if (!parsed.success) { useUIStore.getState().setNotice("Credenciais de sessão inválidas recebidas do servidor."); return; }
@@ -114,10 +117,14 @@ export async function leaveRoom(forget = false) {
   if (heartbeat) clearInterval(heartbeat);
   if (forget) clearSession();
   useGameStore.setState({ ...initialGameState });
+  useBoardStore.setState({ ...initialBoardState });
   useUIStore.setState({ screen: "LOBBY", notice: "" });
   await room?.leave();
 }
 export function decidePlayer(targetPlayerId: string, approve: boolean) { active?.send(approve ? "APPROVE_PLAYER" : "REJECT_PLAYER", { targetPlayerId }); }
+export function boardCommand(type: string, payload?: unknown) {
+  if (useGameStore.getState().connectionState === "CONNECTED") active?.send(type, payload);
+}
 
 export function submitCharacter(payload:CharacterCreationPayload):Promise<void> {
  const room=active;

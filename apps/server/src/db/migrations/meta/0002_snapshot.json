@@ -1,0 +1,1117 @@
+{
+    "version":  "6",
+    "dialect":  "sqlite",
+    "id":  "7f51698f-39cf-4af6-8b8f-f2f28949d4dd",
+    "prevId":  "781b3a85-07af-4883-8d0c-c2df392809b9",
+    "tables":  {
+                   "chambers":  {
+                                    "name":  "chambers",
+                                    "columns":  {
+                                                    "id":  {
+                                                               "name":  "id",
+                                                               "type":  "text",
+                                                               "primaryKey":  true,
+                                                               "notNull":  true,
+                                                               "autoincrement":  false
+                                                           },
+                                                    "map_id":  {
+                                                                   "name":  "map_id",
+                                                                   "type":  "text",
+                                                                   "primaryKey":  false,
+                                                                   "notNull":  true,
+                                                                   "autoincrement":  false
+                                                               },
+                                                    "name":  {
+                                                                 "name":  "name",
+                                                                 "type":  "text",
+                                                                 "primaryKey":  false,
+                                                                 "notNull":  true,
+                                                                 "autoincrement":  false
+                                                             },
+                                                    "biome":  {
+                                                                  "name":  "biome",
+                                                                  "type":  "text",
+                                                                  "primaryKey":  false,
+                                                                  "notNull":  true,
+                                                                  "autoincrement":  false,
+                                                                  "default":  "\u0027DUNGEON\u0027"
+                                                              },
+                                                    "min_q":  {
+                                                                  "name":  "min_q",
+                                                                  "type":  "integer",
+                                                                  "primaryKey":  false,
+                                                                  "notNull":  true,
+                                                                  "autoincrement":  false
+                                                              },
+                                                    "max_q":  {
+                                                                  "name":  "max_q",
+                                                                  "type":  "integer",
+                                                                  "primaryKey":  false,
+                                                                  "notNull":  true,
+                                                                  "autoincrement":  false
+                                                              },
+                                                    "min_r":  {
+                                                                  "name":  "min_r",
+                                                                  "type":  "integer",
+                                                                  "primaryKey":  false,
+                                                                  "notNull":  true,
+                                                                  "autoincrement":  false
+                                                              },
+                                                    "max_r":  {
+                                                                  "name":  "max_r",
+                                                                  "type":  "integer",
+                                                                  "primaryKey":  false,
+                                                                  "notNull":  true,
+                                                                  "autoincrement":  false
+                                                              },
+                                                    "spawn_q":  {
+                                                                    "name":  "spawn_q",
+                                                                    "type":  "integer",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false,
+                                                                    "default":  0
+                                                                },
+                                                    "spawn_r":  {
+                                                                    "name":  "spawn_r",
+                                                                    "type":  "integer",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false,
+                                                                    "default":  0
+                                                                },
+                                                    "offset_x":  {
+                                                                     "name":  "offset_x",
+                                                                     "type":  "integer",
+                                                                     "primaryKey":  false,
+                                                                     "notNull":  true,
+                                                                     "autoincrement":  false,
+                                                                     "default":  0
+                                                                 },
+                                                    "offset_y":  {
+                                                                     "name":  "offset_y",
+                                                                     "type":  "integer",
+                                                                     "primaryKey":  false,
+                                                                     "notNull":  true,
+                                                                     "autoincrement":  false,
+                                                                     "default":  0
+                                                                 },
+                                                    "portals_json":  {
+                                                                         "name":  "portals_json",
+                                                                         "type":  "text",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "autoincrement":  false,
+                                                                         "default":  "\u0027[]\u0027"
+                                                                     }
+                                                },
+                                    "indexes":  {
+
+                                                },
+                                    "foreignKeys":  {
+                                                        "chambers_map_id_maps_id_fk":  {
+                                                                                           "name":  "chambers_map_id_maps_id_fk",
+                                                                                           "tableFrom":  "chambers",
+                                                                                           "tableTo":  "maps",
+                                                                                           "columnsFrom":  [
+                                                                                                               "map_id"
+                                                                                                           ],
+                                                                                           "columnsTo":  [
+                                                                                                             "id"
+                                                                                                         ],
+                                                                                           "onDelete":  "no action",
+                                                                                           "onUpdate":  "no action"
+                                                                                       }
+                                                    },
+                                    "compositePrimaryKeys":  {
+
+                                                             },
+                                    "uniqueConstraints":  {
+
+                                                          },
+                                    "checkConstraints":  {
+
+                                                         }
+                                },
+                   "characters":  {
+                                      "name":  "characters",
+                                      "columns":  {
+                                                      "id":  {
+                                                                 "name":  "id",
+                                                                 "type":  "text",
+                                                                 "primaryKey":  true,
+                                                                 "notNull":  true,
+                                                                 "autoincrement":  false
+                                                             },
+                                                      "player_id":  {
+                                                                        "name":  "player_id",
+                                                                        "type":  "text",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  true,
+                                                                        "autoincrement":  false
+                                                                    },
+                                                      "room_id":  {
+                                                                      "name":  "room_id",
+                                                                      "type":  "text",
+                                                                      "primaryKey":  false,
+                                                                      "notNull":  true,
+                                                                      "autoincrement":  false
+                                                                  },
+                                                      "name":  {
+                                                                   "name":  "name",
+                                                                   "type":  "text",
+                                                                   "primaryKey":  false,
+                                                                   "notNull":  true,
+                                                                   "autoincrement":  false
+                                                               },
+                                                      "race_id":  {
+                                                                      "name":  "race_id",
+                                                                      "type":  "text",
+                                                                      "primaryKey":  false,
+                                                                      "notNull":  true,
+                                                                      "autoincrement":  false
+                                                                  },
+                                                      "archetype_id":  {
+                                                                           "name":  "archetype_id",
+                                                                           "type":  "text",
+                                                                           "primaryKey":  false,
+                                                                           "notNull":  true,
+                                                                           "autoincrement":  false
+                                                                       },
+                                                      "base_str":  {
+                                                                       "name":  "base_str",
+                                                                       "type":  "integer",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   },
+                                                      "base_dex":  {
+                                                                       "name":  "base_dex",
+                                                                       "type":  "integer",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   },
+                                                      "base_con":  {
+                                                                       "name":  "base_con",
+                                                                       "type":  "integer",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   },
+                                                      "base_int":  {
+                                                                       "name":  "base_int",
+                                                                       "type":  "integer",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   },
+                                                      "base_wis":  {
+                                                                       "name":  "base_wis",
+                                                                       "type":  "integer",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   },
+                                                      "base_cha":  {
+                                                                       "name":  "base_cha",
+                                                                       "type":  "integer",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   },
+                                                      "final_str":  {
+                                                                        "name":  "final_str",
+                                                                        "type":  "integer",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  true,
+                                                                        "autoincrement":  false
+                                                                    },
+                                                      "final_dex":  {
+                                                                        "name":  "final_dex",
+                                                                        "type":  "integer",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  true,
+                                                                        "autoincrement":  false
+                                                                    },
+                                                      "final_con":  {
+                                                                        "name":  "final_con",
+                                                                        "type":  "integer",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  true,
+                                                                        "autoincrement":  false
+                                                                    },
+                                                      "final_int":  {
+                                                                        "name":  "final_int",
+                                                                        "type":  "integer",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  true,
+                                                                        "autoincrement":  false
+                                                                    },
+                                                      "final_wis":  {
+                                                                        "name":  "final_wis",
+                                                                        "type":  "integer",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  true,
+                                                                        "autoincrement":  false
+                                                                    },
+                                                      "final_cha":  {
+                                                                        "name":  "final_cha",
+                                                                        "type":  "integer",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  true,
+                                                                        "autoincrement":  false
+                                                                    },
+                                                      "hp":  {
+                                                                 "name":  "hp",
+                                                                 "type":  "integer",
+                                                                 "primaryKey":  false,
+                                                                 "notNull":  true,
+                                                                 "autoincrement":  false
+                                                             },
+                                                      "max_hp":  {
+                                                                     "name":  "max_hp",
+                                                                     "type":  "integer",
+                                                                     "primaryKey":  false,
+                                                                     "notNull":  true,
+                                                                     "autoincrement":  false
+                                                                 },
+                                                      "mp":  {
+                                                                 "name":  "mp",
+                                                                 "type":  "integer",
+                                                                 "primaryKey":  false,
+                                                                 "notNull":  true,
+                                                                 "autoincrement":  false
+                                                             },
+                                                      "max_mp":  {
+                                                                     "name":  "max_mp",
+                                                                     "type":  "integer",
+                                                                     "primaryKey":  false,
+                                                                     "notNull":  true,
+                                                                     "autoincrement":  false
+                                                                 },
+                                                      "defense":  {
+                                                                      "name":  "defense",
+                                                                      "type":  "integer",
+                                                                      "primaryKey":  false,
+                                                                      "notNull":  true,
+                                                                      "autoincrement":  false
+                                                                  },
+                                                      "dodge_chance":  {
+                                                                           "name":  "dodge_chance",
+                                                                           "type":  "integer",
+                                                                           "primaryKey":  false,
+                                                                           "notNull":  true,
+                                                                           "autoincrement":  false
+                                                                       },
+                                                      "speed":  {
+                                                                    "name":  "speed",
+                                                                    "type":  "integer",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false
+                                                                },
+                                                      "flat_dr":  {
+                                                                      "name":  "flat_dr",
+                                                                      "type":  "integer",
+                                                                      "primaryKey":  false,
+                                                                      "notNull":  true,
+                                                                      "autoincrement":  false
+                                                                  },
+                                                      "visual_config_json":  {
+                                                                                 "name":  "visual_config_json",
+                                                                                 "type":  "text",
+                                                                                 "primaryKey":  false,
+                                                                                 "notNull":  true,
+                                                                                 "autoincrement":  false
+                                                                             },
+                                                      "portrait_webp":  {
+                                                                            "name":  "portrait_webp",
+                                                                            "type":  "text",
+                                                                            "primaryKey":  false,
+                                                                            "notNull":  true,
+                                                                            "autoincrement":  false
+                                                                        },
+                                                      "token_webp":  {
+                                                                         "name":  "token_webp",
+                                                                         "type":  "text",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "autoincrement":  false
+                                                                     },
+                                                      "current_chamber_id":  {
+                                                                                 "name":  "current_chamber_id",
+                                                                                 "type":  "text",
+                                                                                 "primaryKey":  false,
+                                                                                 "notNull":  true,
+                                                                                 "autoincrement":  false,
+                                                                                 "default":  "\u0027training-1\u0027"
+                                                                             },
+                                                      "pos_q":  {
+                                                                    "name":  "pos_q",
+                                                                    "type":  "integer",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false,
+                                                                    "default":  0
+                                                                },
+                                                      "pos_r":  {
+                                                                    "name":  "pos_r",
+                                                                    "type":  "integer",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false,
+                                                                    "default":  0
+                                                                },
+                                                      "move_cooldown_ends_at":  {
+                                                                                    "name":  "move_cooldown_ends_at",
+                                                                                    "type":  "integer",
+                                                                                    "primaryKey":  false,
+                                                                                    "notNull":  true,
+                                                                                    "autoincrement":  false,
+                                                                                    "default":  0
+                                                                                },
+                                                      "remaining_steps":  {
+                                                                              "name":  "remaining_steps",
+                                                                              "type":  "integer",
+                                                                              "primaryKey":  false,
+                                                                              "notNull":  true,
+                                                                              "autoincrement":  false,
+                                                                              "default":  -1
+                                                                          },
+                                                      "created_at":  {
+                                                                         "name":  "created_at",
+                                                                         "type":  "integer",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "autoincrement":  false
+                                                                     }
+                                                  },
+                                      "indexes":  {
+                                                      "characters_player_id_unique":  {
+                                                                                          "name":  "characters_player_id_unique",
+                                                                                          "columns":  [
+                                                                                                          "player_id"
+                                                                                                      ],
+                                                                                          "isUnique":  true
+                                                                                      },
+                                                      "characters_room_id_idx":  {
+                                                                                     "name":  "characters_room_id_idx",
+                                                                                     "columns":  [
+                                                                                                     "room_id"
+                                                                                                 ],
+                                                                                     "isUnique":  false
+                                                                                 }
+                                                  },
+                                      "foreignKeys":  {
+                                                          "characters_player_id_players_id_fk":  {
+                                                                                                     "name":  "characters_player_id_players_id_fk",
+                                                                                                     "tableFrom":  "characters",
+                                                                                                     "tableTo":  "players",
+                                                                                                     "columnsFrom":  [
+                                                                                                                         "player_id"
+                                                                                                                     ],
+                                                                                                     "columnsTo":  [
+                                                                                                                       "id"
+                                                                                                                   ],
+                                                                                                     "onDelete":  "no action",
+                                                                                                     "onUpdate":  "no action"
+                                                                                                 },
+                                                          "characters_room_id_rooms_id_fk":  {
+                                                                                                 "name":  "characters_room_id_rooms_id_fk",
+                                                                                                 "tableFrom":  "characters",
+                                                                                                 "tableTo":  "rooms",
+                                                                                                 "columnsFrom":  [
+                                                                                                                     "room_id"
+                                                                                                                 ],
+                                                                                                 "columnsTo":  [
+                                                                                                                   "id"
+                                                                                                               ],
+                                                                                                 "onDelete":  "no action",
+                                                                                                 "onUpdate":  "no action"
+                                                                                             }
+                                                      },
+                                      "compositePrimaryKeys":  {
+
+                                                               },
+                                      "uniqueConstraints":  {
+
+                                                            },
+                                      "checkConstraints":  {
+
+                                                           }
+                                  },
+                   "_dungeons_migrations":  {
+                                                "name":  "_dungeons_migrations",
+                                                "columns":  {
+                                                                "version":  {
+                                                                                "name":  "version",
+                                                                                "type":  "text",
+                                                                                "primaryKey":  true,
+                                                                                "notNull":  true,
+                                                                                "autoincrement":  false
+                                                                            },
+                                                                "applied_at":  {
+                                                                                   "name":  "applied_at",
+                                                                                   "type":  "integer",
+                                                                                   "primaryKey":  false,
+                                                                                   "notNull":  true,
+                                                                                   "autoincrement":  false
+                                                                               },
+                                                                "checksum":  {
+                                                                                 "name":  "checksum",
+                                                                                 "type":  "text",
+                                                                                 "primaryKey":  false,
+                                                                                 "notNull":  true,
+                                                                                 "autoincrement":  false
+                                                                             }
+                                                            },
+                                                "indexes":  {
+
+                                                            },
+                                                "foreignKeys":  {
+
+                                                                },
+                                                "compositePrimaryKeys":  {
+
+                                                                         },
+                                                "uniqueConstraints":  {
+
+                                                                      },
+                                                "checkConstraints":  {
+
+                                                                     }
+                                            },
+                   "editor_history":  {
+                                          "name":  "editor_history",
+                                          "columns":  {
+                                                          "id":  {
+                                                                     "name":  "id",
+                                                                     "type":  "integer",
+                                                                     "primaryKey":  true,
+                                                                     "notNull":  true,
+                                                                     "autoincrement":  true
+                                                                 },
+                                                          "room_id":  {
+                                                                          "name":  "room_id",
+                                                                          "type":  "text",
+                                                                          "primaryKey":  false,
+                                                                          "notNull":  true,
+                                                                          "autoincrement":  false
+                                                                      },
+                                                          "before_json":  {
+                                                                              "name":  "before_json",
+                                                                              "type":  "text",
+                                                                              "primaryKey":  false,
+                                                                              "notNull":  true,
+                                                                              "autoincrement":  false
+                                                                          },
+                                                          "after_json":  {
+                                                                             "name":  "after_json",
+                                                                             "type":  "text",
+                                                                             "primaryKey":  false,
+                                                                             "notNull":  true,
+                                                                             "autoincrement":  false
+                                                                         },
+                                                          "undone":  {
+                                                                         "name":  "undone",
+                                                                         "type":  "integer",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "autoincrement":  false,
+                                                                         "default":  false
+                                                                     }
+                                                      },
+                                          "indexes":  {
+
+                                                      },
+                                          "foreignKeys":  {
+                                                              "editor_history_room_id_rooms_id_fk":  {
+                                                                                                         "name":  "editor_history_room_id_rooms_id_fk",
+                                                                                                         "tableFrom":  "editor_history",
+                                                                                                         "tableTo":  "rooms",
+                                                                                                         "columnsFrom":  [
+                                                                                                                             "room_id"
+                                                                                                                         ],
+                                                                                                         "columnsTo":  [
+                                                                                                                           "id"
+                                                                                                                       ],
+                                                                                                         "onDelete":  "no action",
+                                                                                                         "onUpdate":  "no action"
+                                                                                                     }
+                                                          },
+                                          "compositePrimaryKeys":  {
+
+                                                                   },
+                                          "uniqueConstraints":  {
+
+                                                                },
+                                          "checkConstraints":  {
+                                                                   "editor_history_undone_valid":  {
+                                                                                                       "name":  "editor_history_undone_valid",
+                                                                                                       "value":  "\"editor_history\".\"undone\" IN (0,1)"
+                                                                                                   }
+                                                               }
+                                      },
+                   "maps":  {
+                                "name":  "maps",
+                                "columns":  {
+                                                "id":  {
+                                                           "name":  "id",
+                                                           "type":  "text",
+                                                           "primaryKey":  true,
+                                                           "notNull":  true,
+                                                           "autoincrement":  false
+                                                       },
+                                                "name":  {
+                                                             "name":  "name",
+                                                             "type":  "text",
+                                                             "primaryKey":  false,
+                                                             "notNull":  true,
+                                                             "autoincrement":  false
+                                                         }
+                                            },
+                                "indexes":  {
+
+                                            },
+                                "foreignKeys":  {
+
+                                                },
+                                "compositePrimaryKeys":  {
+
+                                                         },
+                                "uniqueConstraints":  {
+
+                                                      },
+                                "checkConstraints":  {
+
+                                                     }
+                            },
+                   "placed_objects":  {
+                                          "name":  "placed_objects",
+                                          "columns":  {
+                                                          "id":  {
+                                                                     "name":  "id",
+                                                                     "type":  "text",
+                                                                     "primaryKey":  true,
+                                                                     "notNull":  true,
+                                                                     "autoincrement":  false
+                                                                 },
+                                                          "chamber_id":  {
+                                                                             "name":  "chamber_id",
+                                                                             "type":  "text",
+                                                                             "primaryKey":  false,
+                                                                             "notNull":  true,
+                                                                             "autoincrement":  false
+                                                                         },
+                                                          "kind":  {
+                                                                       "name":  "kind",
+                                                                       "type":  "text",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   },
+                                                          "name":  {
+                                                                       "name":  "name",
+                                                                       "type":  "text",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   },
+                                                          "q":  {
+                                                                    "name":  "q",
+                                                                    "type":  "integer",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false
+                                                                },
+                                                          "r":  {
+                                                                    "name":  "r",
+                                                                    "type":  "integer",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false
+                                                                },
+                                                          "rotation":  {
+                                                                           "name":  "rotation",
+                                                                           "type":  "integer",
+                                                                           "primaryKey":  false,
+                                                                           "notNull":  true,
+                                                                           "autoincrement":  false,
+                                                                           "default":  0
+                                                                       },
+                                                          "hidden":  {
+                                                                         "name":  "hidden",
+                                                                         "type":  "integer",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "autoincrement":  false,
+                                                                         "default":  false
+                                                                     }
+                                                      },
+                                          "indexes":  {
+
+                                                      },
+                                          "foreignKeys":  {
+                                                              "placed_objects_chamber_id_chambers_id_fk":  {
+                                                                                                               "name":  "placed_objects_chamber_id_chambers_id_fk",
+                                                                                                               "tableFrom":  "placed_objects",
+                                                                                                               "tableTo":  "chambers",
+                                                                                                               "columnsFrom":  [
+                                                                                                                                   "chamber_id"
+                                                                                                                               ],
+                                                                                                               "columnsTo":  [
+                                                                                                                                 "id"
+                                                                                                                             ],
+                                                                                                               "onDelete":  "no action",
+                                                                                                               "onUpdate":  "no action"
+                                                                                                           }
+                                                          },
+                                          "compositePrimaryKeys":  {
+
+                                                                   },
+                                          "uniqueConstraints":  {
+
+                                                                },
+                                          "checkConstraints":  {
+                                                                   "placed_objects_hidden_valid":  {
+                                                                                                       "name":  "placed_objects_hidden_valid",
+                                                                                                       "value":  "\"placed_objects\".\"hidden\" IN (0,1)"
+                                                                                                   }
+                                                               }
+                                      },
+                   "players":  {
+                                   "name":  "players",
+                                   "columns":  {
+                                                   "id":  {
+                                                              "name":  "id",
+                                                              "type":  "text",
+                                                              "primaryKey":  true,
+                                                              "notNull":  true,
+                                                              "autoincrement":  false
+                                                          },
+                                                   "room_id":  {
+                                                                   "name":  "room_id",
+                                                                   "type":  "text",
+                                                                   "primaryKey":  false,
+                                                                   "notNull":  true,
+                                                                   "autoincrement":  false
+                                                               },
+                                                   "name":  {
+                                                                "name":  "name",
+                                                                "type":  "text",
+                                                                "primaryKey":  false,
+                                                                "notNull":  true,
+                                                                "autoincrement":  false
+                                                            },
+                                                   "session_token":  {
+                                                                         "name":  "session_token",
+                                                                         "type":  "text",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "autoincrement":  false
+                                                                     },
+                                                   "reconnection_token":  {
+                                                                              "name":  "reconnection_token",
+                                                                              "type":  "text",
+                                                                              "primaryKey":  false,
+                                                                              "notNull":  false,
+                                                                              "autoincrement":  false
+                                                                          },
+                                                   "character_id":  {
+                                                                        "name":  "character_id",
+                                                                        "type":  "text",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  false,
+                                                                        "autoincrement":  false
+                                                                    },
+                                                   "approval_status":  {
+                                                                           "name":  "approval_status",
+                                                                           "type":  "text",
+                                                                           "primaryKey":  false,
+                                                                           "notNull":  true,
+                                                                           "autoincrement":  false,
+                                                                           "default":  "\u0027PENDING_APPROVAL\u0027"
+                                                                       },
+                                                   "last_seen_at":  {
+                                                                        "name":  "last_seen_at",
+                                                                        "type":  "integer",
+                                                                        "primaryKey":  false,
+                                                                        "notNull":  true,
+                                                                        "autoincrement":  false
+                                                                    }
+                                               },
+                                   "indexes":  {
+                                                   "players_session_token_unique":  {
+                                                                                        "name":  "players_session_token_unique",
+                                                                                        "columns":  [
+                                                                                                        "session_token"
+                                                                                                    ],
+                                                                                        "isUnique":  true
+                                                                                    },
+                                                   "players_room_id_idx":  {
+                                                                               "name":  "players_room_id_idx",
+                                                                               "columns":  [
+                                                                                               "room_id"
+                                                                                           ],
+                                                                               "isUnique":  false
+                                                                           }
+                                               },
+                                   "foreignKeys":  {
+                                                       "players_room_id_rooms_id_fk":  {
+                                                                                           "name":  "players_room_id_rooms_id_fk",
+                                                                                           "tableFrom":  "players",
+                                                                                           "tableTo":  "rooms",
+                                                                                           "columnsFrom":  [
+                                                                                                               "room_id"
+                                                                                                           ],
+                                                                                           "columnsTo":  [
+                                                                                                             "id"
+                                                                                                         ],
+                                                                                           "onDelete":  "no action",
+                                                                                           "onUpdate":  "no action"
+                                                                                       },
+                                                       "players_character_id_characters_id_fk":  {
+                                                                                                     "name":  "players_character_id_characters_id_fk",
+                                                                                                     "tableFrom":  "players",
+                                                                                                     "tableTo":  "characters",
+                                                                                                     "columnsFrom":  [
+                                                                                                                         "character_id"
+                                                                                                                     ],
+                                                                                                     "columnsTo":  [
+                                                                                                                       "id"
+                                                                                                                   ],
+                                                                                                     "onDelete":  "no action",
+                                                                                                     "onUpdate":  "no action"
+                                                                                                 }
+                                                   },
+                                   "compositePrimaryKeys":  {
+
+                                                            },
+                                   "uniqueConstraints":  {
+
+                                                         },
+                                   "checkConstraints":  {
+                                                            "players_approval_status_valid":  {
+                                                                                                  "name":  "players_approval_status_valid",
+                                                                                                  "value":  "\"players\".\"approval_status\" IN (\u0027PENDING_APPROVAL\u0027, \u0027APPROVED\u0027, \u0027REJECTED\u0027, \u0027NEEDS_CHARACTER_CREATION\u0027)"
+                                                                                              }
+                                                        }
+                               },
+                   "rooms":  {
+                                 "name":  "rooms",
+                                 "columns":  {
+                                                 "id":  {
+                                                            "name":  "id",
+                                                            "type":  "text",
+                                                            "primaryKey":  true,
+                                                            "notNull":  true,
+                                                            "autoincrement":  false
+                                                        },
+                                                 "code":  {
+                                                              "name":  "code",
+                                                              "type":  "text",
+                                                              "primaryKey":  false,
+                                                              "notNull":  true,
+                                                              "autoincrement":  false
+                                                          },
+                                                 "master_password_hash":  {
+                                                                              "name":  "master_password_hash",
+                                                                              "type":  "text",
+                                                                              "primaryKey":  false,
+                                                                              "notNull":  true,
+                                                                              "autoincrement":  false
+                                                                          },
+                                                 "active_stage_id":  {
+                                                                         "name":  "active_stage_id",
+                                                                         "type":  "text",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "autoincrement":  false,
+                                                                         "default":  "\u0027training\u0027"
+                                                                     },
+                                                 "exploration_mode":  {
+                                                                          "name":  "exploration_mode",
+                                                                          "type":  "text",
+                                                                          "primaryKey":  false,
+                                                                          "notNull":  true,
+                                                                          "autoincrement":  false,
+                                                                          "default":  "\u0027DUNGEON_TENSE_30S\u0027"
+                                                                      },
+                                                 "status":  {
+                                                                "name":  "status",
+                                                                "type":  "text",
+                                                                "primaryKey":  false,
+                                                                "notNull":  true,
+                                                                "autoincrement":  false,
+                                                                "default":  "\u0027LOBBY\u0027"
+                                                            },
+                                                 "created_at":  {
+                                                                    "name":  "created_at",
+                                                                    "type":  "integer",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false
+                                                                }
+                                             },
+                                 "indexes":  {
+                                                 "rooms_code_unique":  {
+                                                                           "name":  "rooms_code_unique",
+                                                                           "columns":  [
+                                                                                           "code"
+                                                                                       ],
+                                                                           "isUnique":  true
+                                                                       }
+                                             },
+                                 "foreignKeys":  {
+
+                                                 },
+                                 "compositePrimaryKeys":  {
+
+                                                          },
+                                 "uniqueConstraints":  {
+
+                                                       },
+                                 "checkConstraints":  {
+                                                          "rooms_code_valid":  {
+                                                                                   "name":  "rooms_code_valid",
+                                                                                   "value":  "length(\"rooms\".\"code\") = 5 AND \"rooms\".\"code\" NOT GLOB \u0027*[^ABCDEFGHJKLMNPQRSTUVWXYZ23456789]*\u0027"
+                                                                               },
+                                                          "rooms_status_valid":  {
+                                                                                     "name":  "rooms_status_valid",
+                                                                                     "value":  "\"rooms\".\"status\" IN (\u0027LOBBY\u0027, \u0027ACTIVE\u0027, \u0027PAUSED\u0027)"
+                                                                                 }
+                                                      }
+                             },
+                   "sessions":  {
+                                    "name":  "sessions",
+                                    "columns":  {
+                                                    "id":  {
+                                                               "name":  "id",
+                                                               "type":  "text",
+                                                               "primaryKey":  true,
+                                                               "notNull":  true,
+                                                               "autoincrement":  false
+                                                           },
+                                                    "room_id":  {
+                                                                    "name":  "room_id",
+                                                                    "type":  "text",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false
+                                                                },
+                                                    "status":  {
+                                                                   "name":  "status",
+                                                                   "type":  "text",
+                                                                   "primaryKey":  false,
+                                                                   "notNull":  true,
+                                                                   "autoincrement":  false,
+                                                                   "default":  "\u0027ACTIVE\u0027"
+                                                               },
+                                                    "updated_at":  {
+                                                                       "name":  "updated_at",
+                                                                       "type":  "integer",
+                                                                       "primaryKey":  false,
+                                                                       "notNull":  true,
+                                                                       "autoincrement":  false
+                                                                   }
+                                                },
+                                    "indexes":  {
+                                                    "sessions_room_id_idx":  {
+                                                                                 "name":  "sessions_room_id_idx",
+                                                                                 "columns":  [
+                                                                                                 "room_id"
+                                                                                             ],
+                                                                                 "isUnique":  false
+                                                                             }
+                                                },
+                                    "foreignKeys":  {
+                                                        "sessions_room_id_rooms_id_fk":  {
+                                                                                             "name":  "sessions_room_id_rooms_id_fk",
+                                                                                             "tableFrom":  "sessions",
+                                                                                             "tableTo":  "rooms",
+                                                                                             "columnsFrom":  [
+                                                                                                                 "room_id"
+                                                                                                             ],
+                                                                                             "columnsTo":  [
+                                                                                                               "id"
+                                                                                                           ],
+                                                                                             "onDelete":  "no action",
+                                                                                             "onUpdate":  "no action"
+                                                                                         }
+                                                    },
+                                    "compositePrimaryKeys":  {
+
+                                                             },
+                                    "uniqueConstraints":  {
+
+                                                          },
+                                    "checkConstraints":  {
+                                                             "sessions_status_valid":  {
+                                                                                           "name":  "sessions_status_valid",
+                                                                                           "value":  "\"sessions\".\"status\" IN (\u0027ACTIVE\u0027, \u0027CLOSED\u0027)"
+                                                                                       }
+                                                         }
+                                },
+                   "terrain_cells":  {
+                                         "name":  "terrain_cells",
+                                         "columns":  {
+                                                         "id":  {
+                                                                    "name":  "id",
+                                                                    "type":  "text",
+                                                                    "primaryKey":  true,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false
+                                                                },
+                                                         "chamber_id":  {
+                                                                            "name":  "chamber_id",
+                                                                            "type":  "text",
+                                                                            "primaryKey":  false,
+                                                                            "notNull":  true,
+                                                                            "autoincrement":  false
+                                                                        },
+                                                         "q":  {
+                                                                   "name":  "q",
+                                                                   "type":  "integer",
+                                                                   "primaryKey":  false,
+                                                                   "notNull":  true,
+                                                                   "autoincrement":  false
+                                                               },
+                                                         "r":  {
+                                                                   "name":  "r",
+                                                                   "type":  "integer",
+                                                                   "primaryKey":  false,
+                                                                   "notNull":  true,
+                                                                   "autoincrement":  false
+                                                               },
+                                                         "terrain":  {
+                                                                         "name":  "terrain",
+                                                                         "type":  "text",
+                                                                         "primaryKey":  false,
+                                                                         "notNull":  true,
+                                                                         "autoincrement":  false
+                                                                     }
+                                                     },
+                                         "indexes":  {
+                                                         "terrain_cells_chamber_q_r_unique":  {
+                                                                                                  "name":  "terrain_cells_chamber_q_r_unique",
+                                                                                                  "columns":  [
+                                                                                                                  "chamber_id",
+                                                                                                                  "q",
+                                                                                                                  "r"
+                                                                                                              ],
+                                                                                                  "isUnique":  true
+                                                                                              }
+                                                     },
+                                         "foreignKeys":  {
+                                                             "terrain_cells_chamber_id_chambers_id_fk":  {
+                                                                                                             "name":  "terrain_cells_chamber_id_chambers_id_fk",
+                                                                                                             "tableFrom":  "terrain_cells",
+                                                                                                             "tableTo":  "chambers",
+                                                                                                             "columnsFrom":  [
+                                                                                                                                 "chamber_id"
+                                                                                                                             ],
+                                                                                                             "columnsTo":  [
+                                                                                                                               "id"
+                                                                                                                           ],
+                                                                                                             "onDelete":  "no action",
+                                                                                                             "onUpdate":  "no action"
+                                                                                                         }
+                                                         },
+                                         "compositePrimaryKeys":  {
+
+                                                                  },
+                                         "uniqueConstraints":  {
+
+                                                               },
+                                         "checkConstraints":  {
+                                                                  "terrain_cells_terrain_valid":  {
+                                                                                                      "name":  "terrain_cells_terrain_valid",
+                                                                                                      "value":  "\"terrain_cells\".\"terrain\" IN (\u0027STONE\u0027,\u0027GRASS\u0027,\u0027DIRT\u0027,\u0027SAND\u0027,\u0027WATER\u0027,\u0027DEEP_WATER\u0027,\u0027OBSTACLE\u0027)"
+                                                                                                  }
+                                                              }
+                                     },
+                   "walls":  {
+                                 "name":  "walls",
+                                 "columns":  {
+                                                 "id":  {
+                                                            "name":  "id",
+                                                            "type":  "text",
+                                                            "primaryKey":  true,
+                                                            "notNull":  true,
+                                                            "autoincrement":  false
+                                                        },
+                                                 "chamber_id":  {
+                                                                    "name":  "chamber_id",
+                                                                    "type":  "text",
+                                                                    "primaryKey":  false,
+                                                                    "notNull":  true,
+                                                                    "autoincrement":  false
+                                                                },
+                                                 "edge_key":  {
+                                                                  "name":  "edge_key",
+                                                                  "type":  "text",
+                                                                  "primaryKey":  false,
+                                                                  "notNull":  true,
+                                                                  "autoincrement":  false
+                                                              }
+                                             },
+                                 "indexes":  {
+                                                 "walls_chamber_edge_unique":  {
+                                                                                   "name":  "walls_chamber_edge_unique",
+                                                                                   "columns":  [
+                                                                                                   "chamber_id",
+                                                                                                   "edge_key"
+                                                                                               ],
+                                                                                   "isUnique":  true
+                                                                               }
+                                             },
+                                 "foreignKeys":  {
+                                                     "walls_chamber_id_chambers_id_fk":  {
+                                                                                             "name":  "walls_chamber_id_chambers_id_fk",
+                                                                                             "tableFrom":  "walls",
+                                                                                             "tableTo":  "chambers",
+                                                                                             "columnsFrom":  [
+                                                                                                                 "chamber_id"
+                                                                                                             ],
+                                                                                             "columnsTo":  [
+                                                                                                               "id"
+                                                                                                           ],
+                                                                                             "onDelete":  "no action",
+                                                                                             "onUpdate":  "no action"
+                                                                                         }
+                                                 },
+                                 "compositePrimaryKeys":  {
+
+                                                          },
+                                 "uniqueConstraints":  {
+
+                                                       },
+                                 "checkConstraints":  {
+
+                                                      }
+                             }
+               },
+    "views":  {
+
+              },
+    "enums":  {
+
+              },
+    "_meta":  {
+                  "schemas":  {
+
+                              },
+                  "tables":  {
+
+                             },
+                  "columns":  {
+
+                              }
+              },
+    "internal":  {
+                     "indexes":  {
+
+                                 }
+                 }
+}

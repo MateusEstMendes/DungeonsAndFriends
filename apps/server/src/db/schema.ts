@@ -1,6 +1,6 @@
 import type { RaceId, ArchetypeId } from "@df/shared";
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text, unique, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 export const dungeonsMigrations = sqliteTable("_dungeons_migrations", {
   version: text("version").primaryKey(),
@@ -12,6 +12,8 @@ export const rooms = sqliteTable("rooms", {
   id: text("id").primaryKey(),
   code: text("code").notNull().unique(),
   masterPasswordHash: text("master_password_hash").notNull(),
+  activeStageId: text("active_stage_id").notNull().default("training"),
+  explorationMode: text("exploration_mode", { enum: ["DUNGEON_TENSE_30S", "FREE_EXPLORATION"] }).notNull().default("DUNGEON_TENSE_30S"),
   status: text("status", { enum: ["LOBBY", "ACTIVE", "PAUSED"] }).notNull().default("LOBBY"),
   createdAt: integer("created_at").notNull().$defaultFn(() => Date.now()),
 }, table => [
@@ -74,5 +76,41 @@ export const characters = sqliteTable("characters", {
   visualConfigJson: text("visual_config_json").notNull(),
   portraitWebp: text("portrait_webp").notNull(),
   tokenWebp: text("token_webp").notNull(),
+  currentChamberId: text("current_chamber_id").notNull().default("training-1"),
+  posQ: integer("pos_q").notNull().default(0),
+  posR: integer("pos_r").notNull().default(0),
+  moveCooldownEndsAt: integer("move_cooldown_ends_at").notNull().default(0),
+  remainingSteps: integer("remaining_steps").notNull().default(-1),
   createdAt: integer("created_at").notNull().$defaultFn(() => Date.now()),
 }, table => [index("characters_room_id_idx").on(table.roomId)]);
+
+export const maps = sqliteTable("maps", {
+  id: text("id").primaryKey(), name: text("name").notNull(),
+});
+export const chambers = sqliteTable("chambers", {
+  id: text("id").primaryKey(), mapId: text("map_id").notNull().references(() => maps.id),
+  name: text("name").notNull(), biome: text("biome").notNull().default("DUNGEON"),
+  minQ: integer("min_q").notNull(), maxQ: integer("max_q").notNull(),
+  minR: integer("min_r").notNull(), maxR: integer("max_r").notNull(),
+  spawnQ: integer("spawn_q").notNull().default(0), spawnR: integer("spawn_r").notNull().default(0),
+  offsetX: integer("offset_x").notNull().default(0), offsetY: integer("offset_y").notNull().default(0),
+  portalsJson: text("portals_json").notNull().default("[]"),
+});
+export const terrainCells = sqliteTable("terrain_cells", {
+  id: text("id").primaryKey(), chamberId: text("chamber_id").notNull().references(() => chambers.id),
+  q: integer("q").notNull(), r: integer("r").notNull(), terrain: text("terrain").notNull(),
+}, t => [unique("terrain_cells_chamber_q_r_unique").on(t.chamberId, t.q, t.r), check("terrain_cells_terrain_valid", sql`${t.terrain} IN ('STONE','GRASS','DIRT','SAND','WATER','DEEP_WATER','OBSTACLE')`)]);
+export const walls = sqliteTable("walls", {
+  id: text("id").primaryKey(), chamberId: text("chamber_id").notNull().references(() => chambers.id), edgeKey: text("edge_key").notNull(),
+}, t => [unique("walls_chamber_edge_unique").on(t.chamberId, t.edgeKey)]);
+export const placedObjects = sqliteTable("placed_objects", {
+  id: text("id").primaryKey(), chamberId: text("chamber_id").notNull().references(() => chambers.id),
+  kind: text("kind").notNull(), name: text("name").notNull(),
+  q: integer("q").notNull(), r: integer("r").notNull(), rotation: integer("rotation").notNull().default(0),
+  hidden: integer("hidden", { mode: "boolean" }).notNull().default(false),
+}, t => [check("placed_objects_hidden_valid", sql`${t.hidden} IN (0,1)`)]);
+export const editorHistory = sqliteTable("editor_history", {
+  id: integer("id").primaryKey({ autoIncrement: true }), roomId: text("room_id").notNull().references(() => rooms.id),
+  beforeJson: text("before_json").notNull(), afterJson: text("after_json").notNull(),
+  undone: integer("undone", { mode: "boolean" }).notNull().default(false),
+}, t => [check("editor_history_undone_valid", sql`${t.undone} IN (0,1)`)]);

@@ -1,10 +1,15 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import qrcode from "qrcode-terminal";
+import { resolveCloudflaredBinary } from "./cloudflared.js";
 
-const localBinary = fileURLToPath(new URL("../../../.tools/cloudflared", import.meta.url));
-const binary = process.env.CLOUDFLARED_PATH ?? (existsSync(localBinary) ? localBinary : "cloudflared");
+const binary = resolveCloudflaredBinary();
+const version = spawnSync(binary, ["--version"], { encoding: "utf8", windowsHide: true, timeout: 10_000 });
+if (version.error || version.status !== 0) {
+  console.error(`Não foi possível executar o Cloudflared (${binary}). Coloque o executável em .tools/cloudflared.exe no Windows ou .tools/cloudflared no Linux/macOS, ou configure CLOUDFLARED_PATH.`);
+  console.error(version.error?.message ?? version.stderr);
+  process.exit(1);
+}
 const children: ChildProcess[] = [];
 let stopping = false;
 function stop(code = 0) {
@@ -15,7 +20,7 @@ function stop(code = 0) {
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => stop());
 function launch(command: string, args: string[], stdio: "inherit" | "pipe") {
-  const child = spawn(command, args, { stdio, env: { ...process.env, PORT: "2567" } });
+  const child = spawn(command, args, { stdio, windowsHide: true, env: { ...process.env, PORT: "2567" } });
   children.push(child);
   child.on("error", error => { console.error(error.message); stop(1); });
   child.on("exit", code => { if (!stopping) stop(code ?? 1); });
