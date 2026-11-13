@@ -7,7 +7,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "pnpm --filter @df/shared build && pnpm --parallel --filter ./apps/* dev",
+    "dev": "pnpm --filter @df/shared build && pnpm --parallel --filter './apps/*' dev",
     "build": "pnpm -r build",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck",

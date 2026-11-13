@@ -1,3 +1,5 @@
+import { lazy, Suspense } from "react";
+const CharacterCreatorScreen = lazy(() => import("./components/character/CharacterCreatorScreen").then(module => ({ default: module.CharacterCreatorScreen })));
 import { LobbyScreen } from "./components/lobby/LobbyScreen";
 import { WaitingRoomScreen } from "./components/lobby/WaitingRoomScreen";
 import { ApprovalQueuePopover } from "./components/master/ApprovalQueuePopover";
@@ -6,12 +8,13 @@ import { useGameStore } from "./store/useGameStore";
 import { useUIStore } from "./store/useUIStore";
 export function App() {
   const screen = useUIStore(state => state.screen);
+  const own = useGameStore(state => state.players.find(p => p.id === state.playerId));
   const notice = useUIStore(state => state.notice);
   return <main>
     {screen !== "LOBBY" && <ConnectionBar/>}
     {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => useUIStore.setState({ notice: "" })}>×</button></div>}
-    {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : <RoomScreen/>}
-    <footer>Dungeons & Friends · v0.1.0</footer>
+    {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : own?.status === "NEEDS_CHARACTER_CREATION" && !own.characterId ? <Suspense fallback={<p role="status">Preparando criação de personagem…</p>}><CharacterCreatorScreen key={own.id}/></Suspense> : <RoomScreen/>}
+    <footer>Dungeons & Friends · v0.2.0</footer>
   </main>;
 }
 function ConnectionBar() {
@@ -31,9 +34,9 @@ function RoomScreen() {
   return <section className="panel room">
       <span className="eyebrow">{game.role === "MASTER" ? "Mesa do Mestre" : "Entrada aprovada"}</span>
       <h1>{game.role === "MASTER" ? "Sua mesa está pronta" : `Bem-vindo, ${game.playerName}`}</h1>
-      <p className="muted">{game.role === "MASTER" ? "Compartilhe o convite e aprove os aventureiros na fila de pedidos." : "Sua próxima etapa será criar um personagem. A criação de fichas chega na próxima fase."}</p>
+      <p className="muted">{game.role === "MASTER" ? "Compartilhe o convite e aprove os aventureiros na fila de pedidos." : "Sua ficha está pronta. Aguarde o Mestre para começar a aventura."}</p>
       {game.role === "MASTER" && <div className="invite"><label>Convite da sala<input readOnly value={`${location.origin}/?room=${game.roomCode}`} onFocus={event => event.target.select()}/></label><button onClick={() => { void navigator.clipboard?.writeText(`${location.origin}/?room=${game.roomCode}`).then(() => useUIStore.getState().setNotice("Convite copiado.")).catch(() => useUIStore.getState().setNotice("Selecione e copie o convite acima.")); }}>Copiar convite</button></div>}
-      <h2>Aventureiros na mesa</h2><ul className="roster">{game.players.filter(player => player.status !== "REJECTED").map(player => <li key={player.id}><span className={player.connected ? "dot online" : "dot"}/><strong>{player.name}</strong><small>{player.role === "MASTER" ? "Mestre" : player.status === "PENDING_APPROVAL" ? "Aguardando aprovação" : "Aprovado"} · {player.connected ? "Online" : "Offline"}</small></li>)}</ul>
+      <h2>Aventureiros na mesa</h2><ul className="roster">{game.players.filter(player => player.status !== "REJECTED").map(player => <li key={player.id}><span className={player.connected ? "dot online" : "dot"}/><strong>{player.characterName || player.name}</strong>{player.tokenUrl && <img src={player.tokenUrl} alt={`Token de ${player.characterName}`} width={48} height={48}/> }<small>{player.role === "MASTER" ? "Mestre" : player.status === "PENDING_APPROVAL" ? "Aguardando aprovação" : player.status === "READY" ? "Ficha pronta" : "Criando personagem"} · {player.connected ? "Online" : "Offline"}</small></li>)}</ul>
       <button onClick={() => void leaveRoom()}>Sair da sala</button>
     </section>;
 }

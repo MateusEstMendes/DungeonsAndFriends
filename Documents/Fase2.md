@@ -40,7 +40,8 @@
 - `apps/server/src/rooms/handlers/auth.ts` & `GameRoom.ts` (Modificar):
   - Handler `SUBMIT_CHARACTER`: valida payload com `CharacterCreationSchema` + `validatePointBuy()`, recalcula todos os status derivados no servidor (nunca confia nos status enviados pelo cliente), persiste na tabela `characters`, atualiza `PlayerSchema` no `RoomState` e altera `player.status` de `'NEEDS_CHARACTER_CREATION'` para `'READY'`.
 
-### 1.3 Character Creator 2D Modular e UI (`apps/client`) (Criar / Modificar)
+IMPORTANTE para a criação do Character Creator 2D Modular e UI temos exemplos de personagens e como deveria ser a aparencia deles em todas as raças em imagens dentro de "DesignEX/CharacterModularExample" e a aparencia do ui como exemplo em "DesignEX/UiExample" em cada uma das pastas, as imagens tem nomes diferentes, mas todas são uteis, usar elas como inspiração
+### 1.3 Character Creator 2D Modular e UI (`apps/client`) (Criar / Modificar) 
 - `apps/client/src/game/characterCreator/ModularRenderer.ts` (Criar):
   - Instância PixiJS v8 (`Application`) dedicada ao preview 512x512.
   - Hierarquia de `Container` com ordenação estrita de `zIndex`:
@@ -114,10 +115,17 @@ flowchart LR
 
 ## 4. Checklist de Validação
 
-- [ ] **Validação Matemática do Point Buy**: Tentar criar um personagem no cliente gastando 28 pontos ou reduzindo um atributo para 7 via inspeção de rede (payload adulterado); confirmar que o servidor rejeita a mensagem `SUBMIT_CHARACTER` com erro de validação Zod/PointBuy.
-- [ ] **Verificação das 8 Raças e Teto de Esquiva**: Criar um Elfo (+2 DES, +5% esquiva racial) com Destreza base 15 (total 17, `mod_DES = +3`); confirmar que a Esquiva Passiva calculada no cliente e no banco SQLite respeita `min(20%, 5 + 6 + 5) = 16%`, e que mesmo forçando `DES = 24` em teste unitário a esquiva crava em `20%`.
-- [ ] **Teste da Passiva Humana (*Adaptabilidade*)**: Selecionar a raça Humano e verificar se a UI exige a alocação de `+1` ponto extra em um atributo à escolha além do `+1` universal.
-- [ ] **Inspeção Visual de Camadas (`zIndex`) e Tinting**: Alternar entre todas as 8 raças (incluindo chifres de Demônio/Meio-Dragão, guelras/olhos de fenda grossa de Meio-Tubarão, presas de Orc/Vampiro e barbas de Anão) trocando cores de pele e cabelo; confirmar que a lineart preta permanece intacta e que nenhuma camada atravessa o rosto incorretamente.
+Registro atualizado em **13/11/2026**, considerando os testes automatizados e de navegador executados durante a implementação, além da confirmação do usuário de funcionamento no PC e no celular.
+
+Os itens marcados indicam que seus critérios funcionais foram verificados. No caso do WebP, dimensões, transparência e tamanho foram conferidos por inspeção automatizada das exportações, e a persistência foi coberta pelos testes de integração SQLite; não foi realizada inspeção manual no Drizzle Studio. A revisão visual incluiu 16 variações das oito raças e verificações de recorte das íris e pupilas.
+
+O teste de memória permanece pendente: as 100 trocas verificaram 18 texturas ativas e descarte ao desmontar, mas não mediram o consumo real de memória da GPU no Chrome DevTools.
+
+- [x] **Validação Matemática do Point Buy**: Tentar criar um personagem no cliente gastando 28 pontos ou reduzindo um atributo para 7 via inspeção de rede (payload adulterado); confirmar que o servidor rejeita a mensagem `SUBMIT_CHARACTER` com erro de validação Zod/PointBuy.
+- [x] **Verificação das 8 Raças e Teto de Esquiva**: Criar um Elfo (+2 DES, +5% esquiva racial) com Destreza base 15 (total 17, `mod_DES = +3`); confirmar que a Esquiva Passiva calculada no cliente e no banco SQLite respeita `min(20%, 5 + 6 + 5) = 16%`, e que mesmo forçando `DES = 24` em teste unitário a esquiva crava em `20%`.
+- [x] **Teste da Passiva Humana (*Adaptabilidade*)**: Selecionar a raça Humano e verificar se a UI exige a alocação de `+1` ponto extra em um atributo à escolha além do `+1` universal.
+- [x] **Inspeção Visual de Camadas (`zIndex`) e Tinting**: Alternar entre todas as 8 raças (incluindo chifres de Demônio/Meio-Dragão, guelras/olhos de fenda grossa de Meio-Tubarão, presas de Orc/Vampiro e barbas de Anão) trocando cores de pele e cabelo; confirmar que a lineart preta permanece intacta e que nenhuma camada atravessa o rosto incorretamente.
 - [ ] **Teste de Memory Leak no PixiJS v8**: Trocar de penteado, raça e cor 100 vezes seguidas na tela de criação monitorando `renderer.texture.managedTextures` no Chrome DevTools; confirmar que o consumo de memória de GPU permanece estável.
-- [ ] **Qualidade e Tamanho da Exportação WebP**: Submeter a ficha e inspecionar no Drizzle Studio (`pnpm db:studio`) os campos `portrait_webp` (512x512) e `token_webp` (128x128); confirmar que o fundo externo do token circular é 100% transparente e que ambos os arquivos pesam menos de 50KB juntos.
-- [ ] **Ergonomia Mobile**: Testar a tela de criação em viewport mobile (`375x667`), garantindo que os botões `[ - ]` e `[ + ]` possuem área mínima de `44x44px` e que o preview do personagem permanece visível enquanto se ajustam os atributos.
+- [x] **Qualidade e Tamanho da Exportação WebP**: Submeter a ficha e inspecionar no Drizzle Studio (`pnpm db:studio`) os campos `portrait_webp` (512x512) e `token_webp` (128x128); confirmar que o fundo externo do token circular é 100% transparente e que ambos os arquivos pesam menos de 50KB juntos.
+- [x] **Ergonomia Mobile**: Testar a tela de criação em viewport mobile (`375x667`), garantindo que os botões `[ - ]` e `[ + ]` possuem área mínima de `44x44px` e que o preview do personagem permanece visível enquanto se ajustam os atributos.
+/

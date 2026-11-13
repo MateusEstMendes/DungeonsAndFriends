@@ -1,5 +1,5 @@
 import { Client, type Room } from "@colyseus/sdk";
-import { PROTOCOL_VERSION, RoomCodeSchema, SessionCredentialsPayloadSchema, type RoomState, type ApprovalStatus } from "@df/shared";
+import { PROTOCOL_VERSION, RoomCodeSchema, SessionCredentialsPayloadSchema, type RoomState, type CharacterCreationPayload, type ApprovalStatus } from "@df/shared";
 import { initialGameState, useGameStore } from "../store/useGameStore";
 import { useUIStore } from "../store/useUIStore";
 
@@ -29,7 +29,7 @@ function attach(room: Room<unknown, RoomState>) {
   let lastPlayers = "";
   let networkErrorNotice: string | undefined;
   const sync = (state: RoomState) => {
-    const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected }));
+    const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected, characterId:player.characterId, characterName:player.characterName, raceId:player.raceId, archetypeId:player.archetypeId, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, defense:player.defense, speed:player.speed, tokenUrl:player.tokenUrl, portraitUrl:player.portraitUrl }));
     const serialized = JSON.stringify(players);
     if (serialized !== lastPlayers) { lastPlayers = serialized; useGameStore.setState({ players }); }
     const own = state.players.get(useGameStore.getState().playerId);
@@ -118,3 +118,18 @@ export async function leaveRoom(forget = false) {
   await room?.leave();
 }
 export function decidePlayer(targetPlayerId: string, approve: boolean) { active?.send(approve ? "APPROVE_PLAYER" : "REJECT_PLAYER", { targetPlayerId }); }
+
+export function submitCharacter(payload:CharacterCreationPayload):Promise<void> {
+ const room=active;
+ if(!room||useGameStore.getState().connectionState!=="CONNECTED")return Promise.reject(new Error("Aguarde a conexão com a sala."));
+ return new Promise((resolve,reject)=>{
+  const timeout=setTimeout(()=>finish(new Error("A confirmação demorou. Reconecte antes de tentar novamente.")),15000);
+  const onState=(state:RoomState)=>{if(state.players.get(useGameStore.getState().playerId)?.status==="READY")finish();};
+  room.onStateChange(onState);
+  const offError=room.onMessage("ACTION_ERROR",(message:string)=>finish(new Error(message)));
+  const onLeave=()=>finish(new Error("A conexão foi encerrada. Seu rascunho foi preservado."));
+  room.onLeave(onLeave);
+  function finish(error?:Error){clearTimeout(timeout);room?.onStateChange.remove(onState);offError();room?.onLeave.remove(onLeave);if(error)reject(error);else resolve();}
+  try{room.send("SUBMIT_CHARACTER",payload);}catch(error){finish(error instanceof Error?error:new Error("Falha ao enviar ficha."));}
+ });
+}

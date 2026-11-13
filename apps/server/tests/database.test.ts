@@ -1,9 +1,13 @@
+import Database from "better-sqlite3";
+import { createHash } from "node:crypto";
+import { characterPayload } from "../../../packages/shared/tests/characterFixture.js";
+import { prepareCharacter } from "../src/rooms/handlers/auth.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../src/db/index.js";
-import { dungeonsMigrations, players, rooms, sessions } from "../src/db/schema.js";
+import { characters, dungeonsMigrations, players, rooms, sessions } from "../src/db/schema.js";
 
 const connections: ReturnType<typeof openDatabase>[] = [];
 const folders: string[] = [];
@@ -56,9 +60,43 @@ describe("persistência SQLite", () => {
     const second = open(path);
     expect(second.db.select().from(rooms).get()?.code).toBe("AB2CD");
     expect(second.db.select().from(dungeonsMigrations).all()).toEqual(initialLedger);
-    expect(second.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 1 });
+    expect(second.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 2 });
     second.sqlite.prepare("UPDATE _dungeons_migrations SET checksum = 'altered'").run();
     second.close();
     expect(() => openDatabase(path)).toThrow("alterada após aplicação");
   });
+  it("migra banco da fase 1 preservando sala, jogador, tokens e autorização", () => {
+    const folder = mkdtempSync(join(tmpdir(), "df-upgrade-"));
+    folders.push(folder);
+    const path = join(folder, "dungeons.db");
+    const legacy = new Database(path);
+    const foundation = readFileSync(new URL("../src/db/migrations/0000_init_foundation.sql", import.meta.url), "utf8");
+    const checksum = createHash("sha256").update(foundation).digest("hex");
+    legacy.exec(foundation);
+    legacy.exec("CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash TEXT NOT NULL, created_at NUMERIC)");
+    legacy.prepare("INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)").run(checksum, 1794497610423);
+    legacy.prepare("INSERT INTO _dungeons_migrations VALUES (?, ?, ?)").run("0.1.0", 1, checksum);
+    legacy.prepare("INSERT INTO rooms (id, code, master_password_hash, created_at) VALUES (?, ?, ?, ?)").run(room.id, room.code, room.masterPasswordHash, 1);
+    legacy.prepare("INSERT INTO players (id, room_id, name, session_token, reconnection_token, approval_status, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run("legacy-player", room.id, "Ana", "legacy-token", "legacy-reconnect", "APPROVED", 1);
+    legacy.close();
+    const migrated = open(path);
+    expect(migrated.db.select().from(players).get()).toMatchObject({ id: "legacy-player", sessionToken: "legacy-token", reconnectionToken: "legacy-reconnect", approvalStatus: "APPROVED", characterId: null });
+    expect(migrated.db.select().from(rooms).get()?.code).toBe(room.code);
+    expect(migrated.db.select().from(characters).all()).toEqual([]);
+    expect(migrated.sqlite.pragma("foreign_key_check")).toEqual([]);
+  });
+  it("impõe uma ficha por jogador e as referências de ficha, jogador e sala", () => {
+    const { db, sqlite } = open();
+    db.insert(rooms).values(room).run();
+    const player = db.insert(players).values({ roomId: room.id, name: "Ana", sessionToken: "token" }).returning().get();
+    const values = { ...prepareCharacter(characterPayload()), playerId: player.id, roomId: room.id };
+    expect(() => db.insert(characters).values({ ...values, playerId: "missing" }).run()).toThrow();
+    expect(() => db.insert(characters).values({ ...values, roomId: "missing" }).run()).toThrow();
+    const character = db.insert(characters).values(values).returning().get();
+    expect(() => db.insert(characters).values(values).run()).toThrow();
+    expect(() => sqlite.prepare("UPDATE players SET character_id = 'missing'").run()).toThrow();
+    sqlite.prepare("UPDATE players SET character_id = ?").run(character.id);
+    expect(sqlite.pragma("foreign_key_check")).toEqual([]);
+  });
+
 });

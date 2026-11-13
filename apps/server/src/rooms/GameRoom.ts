@@ -4,8 +4,8 @@ import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { openDatabase } from "../db/index.js";
 import { ensureActiveSession } from "../db/session.js";
-import { players, rooms } from "../db/schema.js";
-import { maskIp, signSessionToken, validateSessionToken, verifyPassword } from "./handlers/auth.js";
+import { characters, players, rooms } from "../db/schema.js";
+import { prepareCharacter, maskIp, signSessionToken, validateSessionToken, verifyPassword } from "./handlers/auth.js";
 
 type Database = ReturnType<typeof openDatabase>;
 export interface RoomServices { database: Database; tokenSecret: string; bootstrapKey: string }
@@ -34,8 +34,10 @@ export class GameRoom extends Room<{ state: RoomState }> {
     for (const saved of this.services.database.db.select().from(players).where(eq(players.roomId, record.id)).all()) {
       const player = new PlayerSchema();
       Object.assign(player, { id: saved.id, name: saved.name, role: saved.id === record.id ? "MASTER" : "PLAYER", status: saved.approvalStatus === "APPROVED" && saved.id !== record.id ? "NEEDS_CHARACTER_CREATION" : saved.approvalStatus, connected: false });
+      this.restoreCharacter(player, saved.characterId);
       this.state.players.set(player.id, player);
     }
+    this.onMessage("SUBMIT_CHARACTER", (client, input) => this.submitCharacter(client, input));
     this.onMessage("APPROVE_PLAYER", (client, input) => this.decide(client, input, true));
     this.onMessage("REJECT_PLAYER", (client, input) => this.decide(client, input, false));
     this.onMessage("PING", (client, timestamp) => {
@@ -103,7 +105,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
       if (Array.from(this.state.players.values()).some(p => p.name.toLocaleLowerCase("pt-BR") === auth.name.toLocaleLowerCase("pt-BR"))) throw new ServerError(409, "Nome já está em uso.");
       player = new PlayerSchema();
       Object.assign(player, { id: auth.playerId, name: auth.name, role: auth.role, status: auth.role === "MASTER" ? "APPROVED" : "PENDING_APPROVAL" });
-      db.insert(players).values({ id: player.id, roomId: this.roomRecord.id, name: player.name, sessionToken: auth.sessionToken, approvalStatus: player.status }).run();
+      db.insert(players).values({ id: player.id, roomId: this.roomRecord.id, name: player.name, sessionToken: auth.sessionToken, approvalStatus: auth.role === "MASTER" ? "APPROVED" : "PENDING_APPROVAL" }).run();
       this.state.players.set(player.id, player);
     }
     this.bindings.set(client.sessionId, player.id);
@@ -118,6 +120,49 @@ export class GameRoom extends Room<{ state: RoomState }> {
     const saved = this.services.database.db.select().from(players).where(eq(players.id, player.id)).get()!;
     const credentials: SessionCredentialsPayload = { playerId: player.id, playerName: player.name, role: player.role, sessionToken: sessionToken ?? saved.sessionToken, reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, roomCode: this.roomId };
     client.send("SESSION_CREDENTIALS", credentials);
+  }
+
+  private syncCharacter(player: PlayerSchema, character: typeof characters.$inferSelect) {
+    Object.assign(player, {
+      characterId: character.id, characterName: character.name, raceId: character.raceId,
+      archetypeId: character.archetypeId, hp: character.hp, maxHp: character.maxHp,
+      mp: character.mp, maxMp: character.maxMp, defense: character.defense, speed: character.speed,
+      portraitUrl: `data:image/webp;base64,${character.portraitWebp}`,
+      tokenUrl: `data:image/webp;base64,${character.tokenWebp}`, status: "READY",
+    });
+  }
+
+  private restoreCharacter(player: PlayerSchema, characterId: string | null) {
+    if (player.role !== "PLAYER" || player.status === "REJECTED" || player.status === "PENDING_APPROVAL") return;
+    const character = characterId ? this.services.database.db.select().from(characters)
+      .where(and(eq(characters.id, characterId), eq(characters.playerId, player.id), eq(characters.roomId, this.roomRecord.id))).get() : undefined;
+    if (character) this.syncCharacter(player, character);
+    else player.status = "NEEDS_CHARACTER_CREATION";
+  }
+
+  private submitCharacter(client: Client, input: unknown) {
+    const player = this.state.players.get(this.bindings.get(client.sessionId)!);
+    if (player?.role !== "PLAYER" || player.status !== "NEEDS_CHARACTER_CREATION") {
+      client.send("ACTION_ERROR", "A criação de ficha não está disponível para este jogador.");
+      return;
+    }
+    let values: ReturnType<typeof prepareCharacter>;
+    try { values = prepareCharacter(input); }
+    catch { client.send("ACTION_ERROR", "Ficha inválida: confira atributos, limite de 27 pontos, bônus humano e imagens WebP."); return; }
+    try {
+      const character = this.services.database.db.transaction(db => {
+        const saved = db.select().from(players).where(and(eq(players.id, player.id), eq(players.roomId, this.roomRecord.id))).get();
+        if (!saved || !["APPROVED", "NEEDS_CHARACTER_CREATION"].includes(saved.approvalStatus) || saved.characterId) {
+          throw new Error("Jogador sem autorização ou já possui ficha.");
+        }
+        const created = db.insert(characters).values({ ...values, playerId: player.id, roomId: this.roomRecord.id }).returning().get();
+        db.update(players).set({ characterId: created.id, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
+        return created;
+      });
+      this.syncCharacter(player, character);
+    } catch {
+      client.send("ACTION_ERROR", "Não foi possível salvar a ficha. Tente novamente.");
+    }
   }
 
   private decide(client: Client, input: unknown, approve: boolean) {
