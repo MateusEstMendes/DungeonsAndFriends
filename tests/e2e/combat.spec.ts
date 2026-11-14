@@ -8,6 +8,8 @@ test('proximidade, arena sincronizada, ações extras e soberania do Mestre em m
   await gm.goto('/'); await gm.getByText('Acesso do Mestre', { exact: true }).click();
   await gm.getByLabel('Senha do Mestre').fill('board-e2e-password'); await gm.getByRole('button', { name: 'Entrar como Mestre' }).click();
   await gm.getByRole('combobox', { name: 'Ritmo da aventura' }).selectOption('FREE_EXPLORATION');
+  await gm.getByRole('combobox', { name: 'Bioma da câmara' }).selectOption('FOREST');
+  await expect(gm.getByRole('combobox', { name: 'Bioma da câmara' })).toHaveValue('FOREST');
   const fixture = JSON.parse(readFileSync('.local/e2e-player.json', 'utf8'));
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, isMobile: true, hasTouch: true });
   await context.addInitScript(data => {
@@ -25,6 +27,7 @@ test('proximidade, arena sincronizada, ações extras e soberania do Mestre em m
   await gm.getByRole('button', { name: 'Iniciar Combate', exact: true }).click();
   await expect(player.getByRole('region', { name: 'Arena de combate', exact: true })).toBeVisible();
   await expect(gm.getByRole('region', { name: 'Arena de combate', exact: true })).toBeVisible();
+  await expect(player.locator('.combat-heading')).toContainText('Floresta');
   await expect(player.locator('.board-canvas canvas')).toHaveAttribute('aria-label', /Arena de combate/);
   await expect(player.getByRole('button', { name: 'Atacar', exact: true })).toBeEnabled();
   await player.getByRole('button', { name: 'Atacar', exact: true }).click();

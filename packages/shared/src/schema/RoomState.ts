@@ -22,7 +22,7 @@ export class CombatStateSchema extends Schema {
 }
 
 export class RoomState extends Schema {
-  @type(CombatStateSchema) combatState = new CombatStateSchema();
+  @view() @type(CombatStateSchema) combatState = new CombatStateSchema();
   @type("string") roomCode = "";
   @type("string") sessionStatus: SessionStatus = "LOBBY";
   @view() @type({ map: PlayerSchema }) players = new MapSchema<PlayerSchema>();

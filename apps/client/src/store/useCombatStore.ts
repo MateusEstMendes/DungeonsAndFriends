@@ -20,9 +20,10 @@ export const emptyCombat: CombatSnapshot = { active: false, encounterId: '', cha
 interface CombatStore {
   combat: CombatSnapshot; participants: CombatParticipant[]; targetId: string; manualMonsterId: string;
   events: CombatEvent[]; busyUntil: number; pending: boolean;
+  serverClockOffset: number;
   proximity: { chamberId: string; message: string } | null;
   cutoffs: { criticalFailure: number; success: number; criticalSuccess: number };
 }
-export const initialCombatState: CombatStore = { combat: emptyCombat, participants: [], targetId: '', manualMonsterId: '', events: [], busyUntil: 0, pending: false, proximity: null,
+export const initialCombatState: CombatStore = { combat: emptyCombat, participants: [], targetId: '', manualMonsterId: '', events: [], busyUntil: 0, pending: false, proximity: null, serverClockOffset: 0,
   cutoffs: { criticalFailure: 1, success: 10, criticalSuccess: 20 } };
 export const useCombatStore = create<CombatStore>(() => ({ ...initialCombatState }));

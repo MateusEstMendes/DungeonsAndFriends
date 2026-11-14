@@ -1,4 +1,4 @@
-﻿# Fase 4 — Implementação do combate
+# Fase 4 — Implementação do combate
 
 A seção 2 de `Fase4.md` reúne seis etapas. As responsabilidades estão distribuídas nesta ordem de dependência:
 
@@ -32,3 +32,10 @@ O Mestre assume um monstro tocando nele ou usando **Controlar monstro**. Os ataq
 
 Os resultados são enviados por `COMBAT_EVENT`, com os dados efetivamente sorteados e o dano após mitigação. O cliente apresenta esses valores e não calcula resultados de combate. As animações respeitam redução de movimento; efeitos temporários são descartados ao ocultar a aba ou sair da cena.
 
+## Integração com fichas e câmaras
+
+O servidor monta cada participante a partir de characters: atributos finais, modificador de Destreza, raça, arquétipo, HP/MP, velocidade, DR e esquiva. O cliente envia apenas a ação e o alvo. As passivas raciais entram no pipeline compartilhado. Habilidades físicas respeitam o arquétipo e a recarga; Fúria Berserk dura duas rodadas e aumenta também o dano recebido. O retrato exibido usa portraitUrl da ficha, preservando o WebP exportado na Fase 2.
+
+No editor, Entidades oferece Goblin, Esqueleto Guerreiro e Cultista Arcano. O seletor Bioma da câmara persiste a escolha no mapa e participa de Undo/Redo. A proximidade usa a posição final do movimento e hexDistance dentro da mesma câmara. O bioma é copiado para o encontro ao iniciar.
+
+O estado do combate usa StateView: fila e token de ação ficam disponíveis apenas ao Mestre e aos jogadores da câmara. Participantes do encontro entram na visão dessa câmara para permitir seleção de aliados e inimigos. Eventos e fichas de combate seguem a mesma restrição de audiência. O relógio dos clientes é estimado a partir do servidor para posicionar as animações na linha do tempo do evento, mesmo quando o relógio local está adiantado ou atrasado.

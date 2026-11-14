@@ -64,7 +64,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
       this.onMessage(name, (client, input) => {
         const player = this.state.players.get(this.bindings.get(client.sessionId) ?? "");
         if (!player || (masterOnly && player.role !== "MASTER")) { client.send("ACTION_ERROR", "Ação não autorizada."); return; }
-        if (this.state.combatState.active && ['REQUEST_MOVE','END_MOVEMENT','MASTER_MOVE_ENTITY','MASTER_EDIT','MASTER_DELETE_ENTITY','MASTER_UNDO','MASTER_REDO','MASTER_SET_STAGE','MASTER_SET_HIDDEN'].includes(name)) {
+        if (this.state.combatState.active && ['REQUEST_MOVE','END_MOVEMENT','MASTER_MOVE_ENTITY','MASTER_EDIT','MASTER_DELETE_ENTITY','MASTER_UNDO','MASTER_REDO','MASTER_SET_STAGE','MASTER_SET_HIDDEN','MASTER_SET_CHAMBER_BIOME'].includes(name)) {
           client.send('ACTION_ERROR', 'Encerre o combate antes de alterar o tabuleiro.'); return;
         }
         try { action(player, input); }
@@ -73,6 +73,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     };
     command("REQUEST_MOVE", false, (p, input) => { this.movement.request(p, input); this.combat.proximity(p); });
     command('START_COMBAT', true, (_p, input) => this.combat.start(input));
+    command('MASTER_SET_CHAMBER_BIOME', true, (_p, input) => master.biome(input));
     command('COMBAT_ACTION', false, (p, input) => this.combat.action(p, input));
     command('MASTER_PAUSE_COMBAT', true, (_p, input) => this.combat.pause(input));
     command('MASTER_SET_FLEE_MODE', true, (_p, input) => this.combat.fleeMode(input));
@@ -95,7 +96,9 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.onMessage("APPROVE_PLAYER", (client, input) => this.decide(client, input, true));
     this.onMessage("REJECT_PLAYER", (client, input) => this.decide(client, input, false));
     this.onMessage("PING", (client, timestamp) => {
-      if (typeof timestamp === "number" && Number.isFinite(timestamp)) client.send("PONG", timestamp);
+      if (typeof timestamp === "number" && Number.isFinite(timestamp)) {
+        client.send("PONG", timestamp); client.send('CLOCK_SYNC', { clientSentAt: timestamp, serverNow: Date.now() });
+      }
     });
     this.onMessage("PONG", (client, timestamp) => {
       const sent = this.heartbeats.get(client.sessionId);

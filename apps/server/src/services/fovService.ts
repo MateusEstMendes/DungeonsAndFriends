@@ -21,8 +21,11 @@ export class FovService {
       const own = this.state.players.get(playerId(client) ?? "");
       if (!client.view) client.view = new StateView();
       const next = new Set<Schema>();
-      const visible = (entity: { currentChamberId: string; q: number; r: number; isHiddenByMaster: boolean }) =>
-        own?.role === "MASTER" || (own?.status === "READY" && entity.currentChamberId === own.currentChamberId && !entity.isHiddenByMaster && vision.get(own.currentChamberId)?.has(getHexKey(entity.q, entity.r)));
+      const combat = this.state.combatState;
+      if (own?.role === 'MASTER' || (own?.status === 'READY' && own.currentChamberId === combat.chamberId)) next.add(combat);
+      const visible = (entity: { id: string; currentChamberId: string; q: number; r: number; isHiddenByMaster: boolean }) =>
+        own?.role === "MASTER" || (own?.status === "READY" && entity.currentChamberId === own.currentChamberId && !entity.isHiddenByMaster
+          && ((combat.active && combat.chamberId === own.currentChamberId && combat.turnOrder.includes(entity.id)) || vision.get(own.currentChamberId)?.has(getHexKey(entity.q, entity.r))));
       for (const p of this.state.players.values()) {
         // Lobby identities are available while assembling the party; READY tokens are culled.
         if (p === own || own?.role === "MASTER" || (p.status !== "READY" && own?.status !== "READY") || (p.status === "READY" && visible(p))) next.add(p);

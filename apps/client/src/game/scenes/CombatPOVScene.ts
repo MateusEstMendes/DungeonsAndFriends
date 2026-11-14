@@ -78,7 +78,7 @@ export class CombatPOVScene {
       if (this.seen.has(event.id) || event.encounterId !== combat.encounterId) continue;
       this.seen.add(event.id);
       if (document.hidden) continue;
-      const elapsed = Math.max(0, (Date.now() - event.startedAt) / 1000);
+      const elapsed = Math.max(0, (Date.now() + useCombatStore.getState().serverClockOffset - event.startedAt) / 1000);
       if (elapsed > 3) continue;
       const plate = this.plates.get(event.targetId), point = plate ? { x: plate.root.x, y: plate.root.y - 100 * plate.root.scale.y } : { x: w / 2, y: h * .73 };
       diceAnimation(this.dice, event.rolls, this.effectsMotion, elapsed);

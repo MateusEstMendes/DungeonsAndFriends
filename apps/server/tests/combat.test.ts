@@ -7,6 +7,7 @@ import { prepareHost } from '../src/host.js';
 import { prepareCharacter } from '../src/rooms/handlers/auth.js';
 import { CombatHandler } from '../src/rooms/handlers/combat.js';
 import { loadBoard, readBoard } from '../src/services/boardRepository.js';
+import { eq } from 'drizzle-orm';
 const databases: ReturnType<typeof openDatabase>[] = [];
 afterEach(() => { databases.splice(0).forEach(db => db.close()); vi.restoreAllMocks(); });
 function setup() {
@@ -65,4 +66,30 @@ it('allows the referee to skip to a monster and perform its action', () => {
   expect(state.combatState.activeParticipantId).toBe('training-1:monster');
   combat.action(master, { type: 'ATTACK', subType: 'SLASHING', targetId: hero.id, turnToken: state.combatState.turnToken }, true);
   expect(hero.hp).toBeLessThan(100);
+});
+it('uses phase 2 persisted attributes and phase 3 biome to resolve minimum damage', () => {
+  const { combat, hero, state, database, send } = setup();
+  database.db.update(characters).set({ finalStr: 6, raceId: 'HUMAN' }).where(eq(characters.id, hero.characterId)).run();
+  state.chambers.get('training-1')!.biome = 'FOREST';
+  combat.start({ chamberId: 'training-1' });
+  expect(state.combatState.biome).toBe('FOREST');
+  combat.action(hero, { type: 'ATTACK', subType: 'SLASHING', targetId: 'training-1:monster', turnToken: state.combatState.turnToken });
+  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ rawDamage: 4, damage: 1, drAbsorbed: 3 }), 'training-1');
+});
+it('consumes active dodge on the next incoming attack with zero damage on a winning counter-check', () => {
+  const { combat, hero, master, state, wait, send } = setup(); combat.start({ chamberId: 'training-1' });
+  combat.action(hero, { type: 'DEFEND', subType: 'ACTIVE_DODGE', turnToken: state.combatState.turnToken });
+  wait(); combat.skip(); wait();
+  combat.action(master, { type: 'ATTACK', subType: 'SLASHING', targetId: hero.id, turnToken: state.combatState.turnToken }, true);
+  expect(hero.hp).toBe(100);
+  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ outcome: 'DODGED_ACTIVE', damage: 0, dodgeRoll: 15 }), 'training-1');
+  expect(combat.snapshot().participants.find(p => p.id === hero.id)?.stance).toBe('');
+});
+it('applies warrior cooldowns and rejects abilities belonging to another archetype', () => {
+  const { combat, hero, database, state, wait } = setup();
+  database.db.update(characters).set({ archetypeId: 'WARRIOR' }).where(eq(characters.id, hero.characterId)).run();
+  combat.start({ chamberId: 'training-1' });
+  expect(() => combat.action(hero, { type: 'ATTACK', subType: 'ROGUE', targetId: 'training-1:monster', turnToken: state.combatState.turnToken })).toThrow('arquétipo');
+  combat.action(hero, { type: 'ATTACK', subType: 'WARRIOR', targetId: 'training-1:monster', turnToken: state.combatState.turnToken });
+  wait(); expect(() => combat.action(hero, { type: 'ATTACK', subType: 'WARRIOR', targetId: 'training-1:monster', turnToken: state.combatState.turnToken })).toThrow('recarga');
 });

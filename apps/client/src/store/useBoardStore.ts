@@ -14,12 +14,12 @@ interface BoardState {
   focusChamberId: string; macro: boolean; debug: boolean;
   tool: "SELECT" | "TERRAIN" | "WALL" | "OBJECT" | "ENTITY";
   terrain: Terrain; wallDirection: number; eraseWall: boolean; objectKind: string; rotation: number; hidden: boolean;
-  selectedEntityId: string; focusRevision: number;
+  selectedEntityId: string; focusRevision: number; monsterName: string;
 }
 export const initialBoardState: BoardState = {
   chambers: [], monsters: [], objects: [], activeStageId: "", explorationMode: "DUNGEON_TENSE_30S",
   visionChamberId: "", activeVision: [], focusChamberId: "", macro: false, debug: false,
   tool: "SELECT", terrain: "STONE", wallDirection: 0, eraseWall: false, objectKind: "CHEST", rotation: 0, hidden: false,
-  selectedEntityId: "", focusRevision: 0,
+  selectedEntityId: "", focusRevision: 0, monsterName: 'Goblin',
 };
 export const useBoardStore = create<BoardState>(() => ({ ...initialBoardState }));

@@ -10,6 +10,7 @@ interface Participant extends CombatantStats {
   id: string; kind: 'PLAYER' | 'MONSTER'; name: string; str: number; int: number; dex: number;
   speed: number; mp: number; maxMp: number; archetypeId: string; attackType: AttackType; baseDamage: number;
   cooldowns: Record<string, number>; potions: number;
+  berserkUntilRound?: number;
 }
 type Send = (name: string, data: unknown, audience: 'MASTER' | string) => void;
 
@@ -47,7 +48,7 @@ export class CombatHandler {
     const catalog = this.database.db.select().from(monstersCatalog).all();
     for (const monster of this.state.monsters.values()) {
       if (monster.currentChamberId !== chamberId || monster.isHiddenByMaster) continue;
-      const row = catalog.find(c => c.name === monster.name || c.id === monster.name || (monster.name === 'Sentinela' && c.id === 'SKELETON_WARRIOR'));
+      const row = catalog.find(c => c.name === monster.name || c.id === monster.name || (monster.name === 'Sentinela' && c.id === 'SKELETON_WARRIOR') || (monster.name === 'Monstro' && c.id === 'GOBLIN'));
       if (!row) throw new Error(`Monstro sem ficha no catálogo: ${monster.name}`);
       roster.set(monster.id, { id: monster.id, name: row.name, kind: 'MONSTER', hp: row.hp, maxHp: row.hp, mp: row.mp, maxMp: row.mp,
         str: row.str, int: row.int, dex: row.dex, dexMod: getModifier(row.dex), speed: row.speed, flatDR: row.flatDr,
@@ -91,9 +92,14 @@ export class CombatHandler {
         const cost = magic ? 10 : 0;
         if (actor.mp < cost) throw new Error('MP insuficiente.');
         const naturalRoll = dice(20);
-        const attackRoll = naturalRoll + getModifier(magic ? actor.int : action.subType === 'ROGUE' ? actor.dex : actor.str);
+        const attackMod = getModifier(magic ? actor.int : action.subType === 'ROGUE' ? actor.dex : actor.str);
+        const attackRoll = naturalRoll + attackMod + (action.subType === 'ROGUE' ? 3 : 0);
+        if (action.subType === 'BARBARIAN') actor.berserkUntilRound = c.round + 2;
+        const raging = (actor.berserkUntilRound ?? 0) > c.round;
+        const incomingRage = (target.berserkUntilRound ?? 0) > c.round;
         const result = resolveAttack({ attacker: actor, defender: target, attackRoll, naturalRoll,
-          baseDamage: actor.baseDamage + getModifier(magic ? actor.int : actor.str) + (signature ? 4 : 0),
+          baseDamage: actor.baseDamage + attackMod + (signature && action.subType !== 'BARBARIAN' ? 4 : 0)
+            + (raging && !magic ? 4 : 0) + (incomingRage ? 2 : 0) + (magic && actor.archetypeId === 'MAGE' && action.subType === 'ARCANE' ? 4 : 0),
           isMagic: magic, isMelee: !magic, criticalFrom: this.cutoffs.criticalSuccess }, dice);
         actor.mp -= cost;
         if (signature) actor.cooldowns[action.subType] = c.round + (action.subType === 'ROGUE' ? 2 : 3);
@@ -148,7 +154,11 @@ export class CombatHandler {
   }
   private alive(kind: Participant['kind']) { return [...this.participants.values()].filter(p => p.kind === kind && p.hp > 0); }
   private requireActive() { if (!this.state.combatState.active) throw new Error('Não há combate ativo.'); }
-  private beginTurn() { const c = this.state.combatState, actor = this.participants.get(c.activeParticipantId)!; c.actionIndex = 0; c.remainingActions = calculateTotalActions(actor.str, actor.int).count; c.turnToken = randomUUID(); }
+  private beginTurn() {
+    const c = this.state.combatState, actor = this.participants.get(c.activeParticipantId)!;
+    if (actor.stance === 'SHIELD_BLOCK') { actor.stance = ''; actor.shieldDR = 0; }
+    c.actionIndex = 0; c.remainingActions = calculateTotalActions(actor.str, actor.int).count; c.turnToken = randomUUID();
+  }
   private advance() {
     const c = this.state.combatState; let index = c.turnOrder.indexOf(c.activeParticipantId);
     for (let i = 0; i < c.turnOrder.length; i++) {
@@ -181,6 +191,7 @@ export class CombatHandler {
         db.insert(combatParticipants).values({ id: p.id, encounterId: c.encounterId, kind: p.kind, statsJson: JSON.stringify(p), hp: p.hp, mp: p.mp }).run();
         if (p.kind === 'PLAYER') { const player = this.state.players.get(p.id); if (player) db.update(characters).set({ hp: p.hp, mp: p.mp }).where(eq(characters.id, player.characterId)).run(); }
         if (p.stance) db.insert(activeBuffs).values({ id: randomUUID(), encounterId: c.encounterId, participantId: p.id, kind: p.stance, amount: p.shieldDR ?? 0, expiresRound: c.round + 1 }).run();
+        if ((p.berserkUntilRound ?? 0) > c.round) db.insert(activeBuffs).values({ id: randomUUID(), encounterId: c.encounterId, participantId: p.id, kind: 'BERSERK', amount: 4, expiresRound: p.berserkUntilRound! }).run();
       }
     });
   }

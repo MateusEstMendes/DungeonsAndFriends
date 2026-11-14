@@ -43,6 +43,10 @@ function attach(room: Room<unknown, RoomState>) {
     useCombatStore.setState({ combat, ...(previous.turnToken !== combat.turnToken ? { pending: false } : {}), ...(!combat.active ? { manualMonsterId: '' } : {}) });
   };
   room.onStateChange(sync);
+  room.onMessage('CLOCK_SYNC', (data: { clientSentAt: number; serverNow: number }) => {
+    const now = Date.now(), rtt = Math.max(0, now - data.clientSentAt);
+    useCombatStore.setState({ serverClockOffset: data.serverNow + rtt / 2 - now });
+  });
   room.onMessage('PROXIMITY_ALERT', (proximity: { chamberId: string; message: string }) => useCombatStore.setState({ proximity }));
   room.onMessage('COMBAT_ROSTER', (data: { encounterId: string; participants: CombatParticipant[]; cutoffs: typeof initialCombatState.cutoffs }) => {
     useCombatStore.setState(s => ({ participants: data.participants, cutoffs: data.cutoffs,
@@ -73,6 +77,7 @@ function attach(room: Room<unknown, RoomState>) {
   ping();
   room.onDrop(() => useGameStore.setState({ connectionState: "RECONNECTING" }));
   room.onReconnect(() => {
+    useCombatStore.setState({ pending: false, busyUntil: 0 });
     persistReconnectionToken(room.reconnectionToken);
     useGameStore.setState({ connectionState: "CONNECTED" });
     if (networkErrorNotice && useUIStore.getState().notice === networkErrorNotice) useUIStore.setState({ notice: "" });

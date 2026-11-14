@@ -5,6 +5,7 @@ const position = { q: coord, r: coord };
 export const RequestMoveSchema = z.strictObject({ targetQ: coord, targetR: coord, revision: z.number().int().nonnegative() });
 export const MasterMoveSchema = z.strictObject({ entityId: z.string().min(1).max(100), chamberId: z.string().min(1).max(100), ...position });
 export const ExplorationModeSchema = z.enum(["DUNGEON_TENSE_30S", "FREE_EXPLORATION"]);
+export const ChamberBiomeSchema = z.strictObject({ chamberId: z.string().min(1).max(100), biome: z.enum(['CAVE','FOREST','TAVERN','DUNGEON']) });
 const base = { chamberId: z.string().min(1).max(100), ...position };
 export const MasterEditSchema = z.discriminatedUnion("layer", [
   z.strictObject({ ...base, layer: z.literal("TERRAIN"), terrain: z.enum(TERRAIN_TYPES) }),

@@ -128,6 +128,19 @@ describe("movimento autoritativo e editor", () => {
   });
 });
 describe("culling FOV no codec de rede", () => {
+  it('keeps encounter tokens and initiative private to its chamber and master', () => {
+    const { state, addPlayer } = setup(), own = addPlayer('Ana');
+    own.currentChamberId = 'training-2';
+    Object.assign(state.combatState, { active: true, chamberId: 'training-1', turnToken: 'SECRET_COMBAT_TOKEN' });
+    state.combatState.turnOrder.push('SECRET_MONSTER_INITIATIVE');
+    const gm = Object.assign(new PlayerSchema(), { id: 'gm', role: 'MASTER' }); state.players.set(gm.id, gm);
+    const viewer = { send() {} } as unknown as Client, referee = { send() {} } as unknown as Client;
+    const encoder = new Encoder(state), fov = new FovService(state);
+    const refresh = () => fov.refresh([viewer,referee], client => client === viewer ? own.id : gm.id);
+    const wire = (client: Client) => { const bytes = encoder.encodeAll(); return Buffer.from(encoder.encodeAllView(client.view!, bytes.byteLength, { offset: bytes.byteLength })).toString('utf8'); };
+    refresh(); expect(wire(viewer)).not.toContain('SECRET_'); expect(wire(referee)).toContain('SECRET_COMBAT_TOKEN');
+    own.currentChamberId = 'training-1'; refresh(); expect(wire(viewer)).toContain('SECRET_MONSTER_INITIATIVE');
+  });
   it("omite bytes de monstros distantes, atrás de paredes, ocultos e de outra câmara; remove após sair da visão", () => {
     const { state, addPlayer } = setup(), own = addPlayer("Ana");
     const behind = Object.assign(new MonsterSchema(), { id: "behind-wall", name: "SEGREDO_PAREDE", currentChamberId: "training-1", q: 1, r: 0 });

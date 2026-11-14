@@ -4,6 +4,7 @@ import { MasterEditSchema, MasterMoveSchema, RotateObjectSchema, EntityHiddenSch
 import { characters, editorHistory, rooms } from "../../db/schema.js";
 import { readBoard, loadBoard, writeBoard, type BoardSnapshot, type Database } from "../../services/boardRepository.js";
 import type { MovementHandler } from "./movement.js";
+import { ChamberBiomeSchema } from '@df/shared';
 // Existing stacks can be reduced or moved apart without deleting saved objects.
 // No command, including Undo/Redo, may grow a duplicate stack.
 function assertObjectStacks(before: BoardSnapshot, after: BoardSnapshot) {
@@ -23,6 +24,10 @@ function assertObjectStacks(before: BoardSnapshot, after: BoardSnapshot) {
 export class MasterHandler {
   constructor(private readonly state: RoomState, private readonly database: Database, private readonly roomId: string,
     private readonly movement: MovementHandler, private readonly refresh: () => void) {}
+  biome(input: unknown) {
+    const data = ChamberBiomeSchema.parse(input);
+    this.change(board => { const chamber = board.chambers.find(c => c.id === data.chamberId); if (!chamber) throw new Error('Câmara inválida.'); chamber.biome = data.biome; });
+  }
   private change(mutate: (data: BoardSnapshot) => void) {
     const before = readBoard(this.database), after = structuredClone(before);
     mutate(after);

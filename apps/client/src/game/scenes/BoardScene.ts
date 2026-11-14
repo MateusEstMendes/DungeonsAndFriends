@@ -177,7 +177,7 @@ export class BoardScene {
     } else if (board.tool === "TERRAIN") boardCommand("MASTER_EDIT", { ...base, layer: "TERRAIN", terrain: board.terrain });
     else if (board.tool === "WALL") boardCommand("MASTER_EDIT", { ...base, layer: "WALL", direction: board.wallDirection, erase: board.eraseWall });
     else if (board.tool === "OBJECT") boardCommand("MASTER_EDIT", { ...base, layer: "OBJECT", kind: board.objectKind, rotation: board.rotation, hidden: board.hidden });
-    else boardCommand("MASTER_EDIT", { ...base, layer: "ENTITY", name: "Monstro", hidden: board.hidden });
+    else boardCommand("MASTER_EDIT", { ...base, layer: "ENTITY", name: board.monsterName, hidden: board.hidden });
   }
   private keyDown = (event: KeyboardEvent) => {
     if (event.target instanceof HTMLElement && /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
