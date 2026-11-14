@@ -8,5 +8,5 @@ export const APPROVAL_STATUSES = [
   "PENDING_APPROVAL", "APPROVED", "REJECTED", "NEEDS_CHARACTER_CREATION", "READY",
 ] as const;
 export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
-export const SESSION_STATUSES = ["LOBBY", "ACTIVE", "PAUSED"] as const;
+export const SESSION_STATUSES = ["LOBBY", "ACTIVE", "PAUSED", "IN_COMBAT"] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];

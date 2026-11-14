@@ -6,6 +6,11 @@ import { MonsterSchema } from "./MonsterSchema.js";
 import { PlacedObjectSchema } from "./PlacedObjectSchema.js";
 
 export class CombatStateSchema extends Schema {
+  @type('string') encounterId = '';
+  @type('string') chamberId = '';
+  @type('string') turnToken = '';
+  @type('number') actionIndex = 0;
+  @type('boolean') isProcessingAction = false;
   @type('boolean') active = false;
   @type('string') biome: 'CAVE' | 'FOREST' | 'TAVERN' | 'DUNGEON' = 'DUNGEON';
   @type('number') round = 0;

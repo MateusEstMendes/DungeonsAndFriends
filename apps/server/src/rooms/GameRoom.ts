@@ -11,6 +11,7 @@ import { FovService } from "../services/fovService.js";
 import { loadBoard, readBoard } from "../services/boardRepository.js";
 import { MovementHandler } from "./handlers/movement.js";
 import { MasterHandler } from "./handlers/master.js";
+import { CombatHandler } from './handlers/combat.js';
 
 type Database = ReturnType<typeof openDatabase>;
 export interface RoomServices { database: Database; tokenSecret: string; bootstrapKey: string }
@@ -24,6 +25,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
   private authAttempts = new Map<string, { count: number; resetAt: number }>();
   private fov!: FovService;
   private movement!: MovementHandler;
+  private combat!: CombatHandler;
   constructor(private readonly services: RoomServices) { super(); }
 
   onCreate(options: { bootstrapKey?: string; roomCode?: string }) {
@@ -50,16 +52,35 @@ export class GameRoom extends Room<{ state: RoomState }> {
       this.state.players.set(player.id, player);
       if (player.status === "READY") this.movement.spawn(player);
     }
+    this.combat = new CombatHandler(this.state, this.services.database, record.id, (name, data, audience) => {
+      for (const client of this.clients) {
+        const p = this.state.players.get(this.bindings.get(client.sessionId) ?? '');
+        if (p?.role === 'MASTER' || (audience !== 'MASTER' && p?.currentChamberId === audience)) client.send(name, data);
+      }
+    }, () => this.refreshViews());
+    this.combat.restore();
     const master = new MasterHandler(this.state, this.services.database, record.id, this.movement, () => this.refreshViews());
     const command = (name: string, masterOnly: boolean, action: (player: PlayerSchema, input: unknown) => void) => {
       this.onMessage(name, (client, input) => {
         const player = this.state.players.get(this.bindings.get(client.sessionId) ?? "");
         if (!player || (masterOnly && player.role !== "MASTER")) { client.send("ACTION_ERROR", "Ação não autorizada."); return; }
+        if (this.state.combatState.active && ['REQUEST_MOVE','END_MOVEMENT','MASTER_MOVE_ENTITY','MASTER_EDIT','MASTER_DELETE_ENTITY','MASTER_UNDO','MASTER_REDO','MASTER_SET_STAGE','MASTER_SET_HIDDEN'].includes(name)) {
+          client.send('ACTION_ERROR', 'Encerre o combate antes de alterar o tabuleiro.'); return;
+        }
         try { action(player, input); }
         catch (error) { client.send("ACTION_ERROR", error instanceof Error && error.name !== "ZodError" ? error.message : "Comando inválido."); }
       });
     };
-    command("REQUEST_MOVE", false, (p, input) => this.movement.request(p, input));
+    command("REQUEST_MOVE", false, (p, input) => { this.movement.request(p, input); this.combat.proximity(p); });
+    command('START_COMBAT', true, (_p, input) => this.combat.start(input));
+    command('COMBAT_ACTION', false, (p, input) => this.combat.action(p, input));
+    command('MASTER_PAUSE_COMBAT', true, (_p, input) => this.combat.pause(input));
+    command('MASTER_SET_FLEE_MODE', true, (_p, input) => this.combat.fleeMode(input));
+    command('MASTER_REORDER_INITIATIVE', true, (_p, input) => this.combat.reorder(input));
+    command('MASTER_FORCE_TURN_SKIP', true, () => this.combat.skip());
+    command('MASTER_MANUAL_MONSTER_ACTION', true, (p, input) => this.combat.action(p, input, true));
+    command('MASTER_END_COMBAT', true, () => this.combat.end());
+    command('MASTER_SET_D20_CUTOFFS', true, (_p, input) => this.combat.setCutoffs(input));
     command("END_MOVEMENT", false, p => this.movement.endTurn(p));
     command("MASTER_MOVE_ENTITY", true, (_p, input) => master.move(input));
     command("MASTER_ROTATE_OBJECT", true, (_p, input) => master.rotate(input));
@@ -147,6 +168,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     db.update(players).set({ sessionToken: auth.sessionToken, reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client, auth.sessionToken, player);
     this.refreshViews();
+    if (this.state.combatState.active && (player.role === 'MASTER' || player.currentChamberId === this.state.combatState.chamberId)) client.send('COMBAT_ROSTER', this.combat.snapshot());
     this.log("join", client);
   }
 
@@ -239,6 +261,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.refreshViews();
     this.services.database.db.update(players).set({ reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client);
+    if (this.state.combatState.active && (player.role === 'MASTER' || player.currentChamberId === this.state.combatState.chamberId)) client.send('COMBAT_ROSTER', this.combat.snapshot());
     this.log("reconnect", client);
   }
   onLeave(client: Client) {

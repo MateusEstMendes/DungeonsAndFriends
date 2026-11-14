@@ -114,3 +114,32 @@ export const editorHistory = sqliteTable("editor_history", {
   beforeJson: text("before_json").notNull(), afterJson: text("after_json").notNull(),
   undone: integer("undone", { mode: "boolean" }).notNull().default(false),
 }, t => [check("editor_history_undone_valid", sql`${t.undone} IN (0,1)`)]);
+
+export const monstersCatalog = sqliteTable('monsters_catalog', {
+  id: text('id').primaryKey(), name: text('name').notNull(),
+  hp: integer('hp').notNull(), mp: integer('mp').notNull().default(0),
+  str: integer('str').notNull(), dex: integer('dex').notNull(), int: integer('int').notNull(),
+  speed: integer('speed').notNull(), flatDr: integer('flat_dr').notNull().default(0),
+  passiveDodge: integer('passive_dodge').notNull().default(0),
+  attackType: text('attack_type').notNull(), baseDamage: integer('base_damage').notNull(),
+});
+export const combatEncounters = sqliteTable('combat_encounters', {
+  id: text('id').primaryKey(), roomId: text('room_id').notNull().references(() => rooms.id),
+  chamberId: text('chamber_id').notNull(), status: text('status').notNull().default('ACTIVE'),
+  biome: text('biome').notNull(), round: integer('round').notNull(),
+  turnOrderJson: text('turn_order_json').notNull(), activeParticipantId: text('active_participant_id').notNull(),
+  remainingActions: integer('remaining_actions').notNull(), actionIndex: integer('action_index').notNull().default(0),
+  fleeMode: text('flee_mode').notNull().default('NORMAL'), isPaused: integer('is_paused', { mode: 'boolean' }).notNull().default(false),
+  turnToken: text('turn_token').notNull(), cutoffsJson: text('cutoffs_json').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, t => [index('combat_encounters_room_idx').on(t.roomId)]);
+export const combatParticipants = sqliteTable('combat_participants', {
+  id: text('id').notNull(), encounterId: text('encounter_id').notNull().references(() => combatEncounters.id),
+  kind: text('kind').notNull(), statsJson: text('stats_json').notNull(),
+  hp: integer('hp').notNull(), mp: integer('mp').notNull(),
+}, t => [unique('combat_participants_encounter_entity').on(t.encounterId, t.id)]);
+export const activeBuffs = sqliteTable('active_buffs', {
+  id: text('id').primaryKey(), encounterId: text('encounter_id').notNull().references(() => combatEncounters.id),
+  participantId: text('participant_id').notNull(), kind: text('kind').notNull(),
+  amount: integer('amount').notNull(), expiresRound: integer('expires_round').notNull(),
+});

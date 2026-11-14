@@ -7,6 +7,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
+    "test:combat-sim": "pnpm --filter @df/shared build && pnpm --filter @df/server test:combat-sim",
     "dev": "pnpm --filter @df/shared build && pnpm --parallel --filter @df/client --filter @df/server run dev",
     "build": "pnpm -r build",
     "test": "vitest run",
