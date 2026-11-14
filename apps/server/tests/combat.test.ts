@@ -29,7 +29,7 @@ function setup(filename = ':memory:') {
   const saved = database.db.insert(players).values({ name: 'Hero', roomId: room.id, sessionToken: 'hero' }).returning().get();
   const character = database.db.insert(characters).values({ ...prepareCharacter(characterPayload()), playerId: saved.id, roomId: room.id,
     finalStr: 20, finalDex: 20, finalInt: 10, speed: 10, hp: 100, maxHp: 100 }).returning().get();
-  const hero = Object.assign(new PlayerSchema(), { id: saved.id, characterId: character.id, hp: 100, maxHp: 100, status: 'READY', currentChamberId: 'training-1', q: 3, r: -1 });
+  const hero = Object.assign(new PlayerSchema(), { id: saved.id, characterId: character.id, hp: 100, maxHp: 100, status: 'READY', connected: true, currentChamberId: 'training-1', q: 3, r: -1 });
   state.players.set(hero.id, hero);
   const master = Object.assign(new PlayerSchema(), { id: room.id, role: 'MASTER' });
   let now = 1000;
@@ -49,6 +49,37 @@ it('alerts the master only, orders initiative, rejects duplicates and forbids ex
   for (let i = 0; i < 15; i++) expect(() => combat.action(hero, action)).toThrow();
   wait(); expect(() => combat.action(hero, action)).toThrow('expirado');
   expect(() => combat.action(hero, { type: 'FLEE', turnToken: state.combatState.turnToken })).toThrow('extra');
+});
+it('excludes absent and unplaced characters when starting an encounter', () => {
+  const { combat, hero } = setup();
+  hero.connected = false;
+  expect(() => combat.start({ chamberId: 'training-1' })).toThrow();
+  hero.reconnecting = true; hero.awaitingPosition = true;
+  expect(() => combat.start({ chamberId: 'training-1' })).toThrow();
+  hero.awaitingPosition = false;
+  expect(() => combat.start({ chamberId: 'training-1' })).not.toThrow();
+});
+it('keeps consumables on departure, hides absent targets and reinserts without replacing the current turn', () => {
+  const { combat, database, state, room, hero } = setup();
+  const saved = database.db.insert(players).values({ name: 'Ally', roomId: room.id, sessionToken: 'ally' }).returning().get();
+  const character = database.db.insert(characters).values({ ...prepareCharacter(characterPayload()), playerId: saved.id, roomId: room.id }).returning().get();
+  const ally = Object.assign(new PlayerSchema(), { id: saved.id, characterId: character.id, characterName: 'Ally', hp: character.hp, maxHp: character.maxHp,
+    status: 'READY', connected: true, currentChamberId: 'training-1', q: 1, r: 0 });
+  state.players.set(ally.id, ally);
+  combat.start({ chamberId: 'training-1' });
+  combat.action(hero, { type: 'ITEM', itemId: 'HEALTH_POTION', targetId: hero.id, turnToken: state.combatState.turnToken });
+  expect(combat.snapshot().participants.find(p => p.id === hero.id)?.potions).toBe(1);
+  combat.removePlayer(hero.id);
+  expect(combat.snapshot().participants.some(p => p.id === hero.id)).toBe(false);
+  const token = state.combatState.turnToken, actor = state.combatState.activeParticipantId;
+  hero.connected = false;
+  expect(() => combat.addPlayer({ targetPlayerId: hero.id })).toThrow();
+  hero.connected = true;
+  combat.addPlayer({ targetPlayerId: hero.id });
+  expect(state.combatState.turnToken).toBe(token); expect(state.combatState.activeParticipantId).toBe(actor);
+  expect(combat.snapshot().participants.find(p => p.id === hero.id)?.potions).toBe(1);
+  expect(state.combatState.turnOrder.at(-1)).toBe(hero.id);
+  expect(() => combat.addPlayer({ targetPlayerId: hero.id })).toThrow();
 });
 it('persists exact actions, HP, token, pause and initiative for restoration', () => {
   const { combat, database, room, hero, state } = setup();

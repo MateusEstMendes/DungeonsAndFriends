@@ -3,7 +3,7 @@ import { useGameStore } from "../../store/useGameStore";
 import { useUIStore } from "../../store/useUIStore";
 export function ApprovalQueuePopover() {
   const players = useGameStore(state => state.players);
-  const pending = players.filter(player => player.role === "PLAYER" && player.status === "PENDING_APPROVAL");
+  const pending = players.filter(player => player.role === "PLAYER" && player.status === "PENDING_APPROVAL" && (player.connected || player.reconnecting));
   const open = useUIStore(state => state.queueOpen);
   const connected = useGameStore(state => state.connectionState === "CONNECTED");
   return <div className="queue"><button className={pending.length ? "queue-badge breathing" : "queue-badge"} aria-expanded={open} aria-controls="approval-queue" onClick={() => useUIStore.setState({ queueOpen: !open })}>Pedidos <span aria-live="polite">{pending.length}</span></button>

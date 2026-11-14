@@ -1,3 +1,4 @@
+import { isCharacterPresent } from "@df/shared";
 import { useState } from "react";
 import { TERRAIN_TYPES } from "@df/shared";
 import { boardCommand } from "../../network/colyseusClient";
@@ -6,8 +7,8 @@ import { useGameStore } from "../../store/useGameStore";
 const terrainNames = { STONE: "Pedra", GRASS: "Grama", DIRT: "Terra", SAND: "Areia", WATER: "Água rasa (2 passos)", DEEP_WATER: "Água profunda", OBSTACLE: "Obstáculo opaco" };
 export function BoardEditor() {
   const board = useBoardStore(), players = useGameStore(s => s.players);
-  const selected = [...players.filter(p => p.status === "READY"), ...board.monsters, ...board.objects].find(e => e.id === board.selectedEntityId);
-  const overlapped = selected ? [...board.objects, ...board.monsters, ...players.filter(p => p.status === "READY")].filter(e => e.currentChamberId === selected.currentChamberId && e.q === selected.q && e.r === selected.r) : [];
+  const selected = [...players.filter(isCharacterPresent), ...board.monsters, ...board.objects].find(e => e.id === board.selectedEntityId);
+  const overlapped = selected ? [...board.objects, ...board.monsters, ...players.filter(isCharacterPresent)].filter(e => e.currentChamberId === selected.currentChamberId && e.q === selected.q && e.r === selected.r) : [];
   const [q, setQ] = useState("0"), [r, setR] = useState("0");
   const set = useBoardStore.setState;
   return <aside className="editor-hud board-glass" aria-label="Editor do Mestre"><details open><summary>Ferramentas do Mestre</summary>

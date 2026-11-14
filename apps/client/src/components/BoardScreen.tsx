@@ -18,7 +18,7 @@ export function BoardScreen() {
   const game = useGameStore(), board = useBoardStore();
   const { combat, proximity } = useCombatStore();
   const own = game.players.find(p => p.id === game.playerId);
-  const participating = combat.active && (game.role === 'MASTER' || own?.currentChamberId === combat.chamberId);
+  const participating = combat.active && (game.role === 'MASTER' || (!own?.awaitingPosition && own?.currentChamberId === combat.chamberId));
   const [arena, setArena] = useState(participating);
   useEffect(() => {
     if (participating) { setArena(true); return; }
@@ -33,6 +33,7 @@ export function BoardScreen() {
   }, [arena]);
   return <section className={`board-screen${arena ? ' combat-screen' : ''}`} aria-label={arena ? 'Arena de combate' : 'Mesa de aventura'}>
     <div ref={host} className="board-canvas"/>
+    {own?.awaitingPosition && <div className="board-error board-glass" role="status">Aguardando posicionamento pelo mestre. Não há casa livre na sua câmara.</div>}
     {error && <div className="board-error board-glass" role="alert">Não foi possível iniciar o tabuleiro: {error}. Recarregue a página e verifique a aceleração gráfica do navegador.</div>}
     {arena ? <><CombatOverlay/><MasterRefereeBar/></> : <>
     <div className="chamber-title board-glass"><span className="eyebrow">Masmorra de Treinamento · {game.role === "MASTER" ? "Mestre" : "Aventura"}</span><h1>{chamber?.name || "Preparando câmara…"}</h1><small>{game.role === "MASTER" ? "Todas as entidades visíveis ao Mestre" : "Visão compartilhada · 4 hexágonos"}</small></div>

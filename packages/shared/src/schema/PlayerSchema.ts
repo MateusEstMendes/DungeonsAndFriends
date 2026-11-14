@@ -20,6 +20,8 @@ export class PlayerSchema extends Schema {
   @type("number") defense = 0;
   @type("number") speed = 0;
   @type("boolean") connected = false;
+  @type("boolean") reconnecting = false;
+  @type("boolean") awaitingPosition = false;
   @view() @type("string") currentChamberId = "";
   @view() @type("number") q = 0;
   @view() @type("number") r = 0;
@@ -27,4 +29,9 @@ export class PlayerSchema extends Schema {
   @type("number") moveCooldownEndsAt = 0;
   @type("number") remainingSteps = 0;
   @type("number") moveRevision = 0;
+}
+
+/** Includes the reconnect grace period, but never an unplaced or unapproved character. */
+export function isCharacterPresent(player: { status: string; connected: boolean; reconnecting: boolean; awaitingPosition: boolean }) {
+  return player.status === "READY" && (player.connected || player.reconnecting) && !player.awaitingPosition;
 }

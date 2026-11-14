@@ -1,6 +1,6 @@
 import { StateView, type Schema } from "@colyseus/schema";
 import type { Client } from "@colyseus/core";
-import { computeHexFOV, getHexEdgeKey, getHexKey, type RoomState } from "@df/shared";
+import { computeHexFOV, getHexEdgeKey, getHexKey, isCharacterPresent, type RoomState } from "@df/shared";
 /** Reconciles membership before every patch; hidden entities never enter a player view. */
 export class FovService {
   private membership = new WeakMap<Client, Set<Schema>>();
@@ -8,7 +8,7 @@ export class FovService {
   refresh(clients: readonly Client[], playerId: (client: Client) => string | undefined) {
     const vision = new Map<string, Set<string>>();
     for (const p of this.state.players.values()) {
-      if (p.role !== "PLAYER" || p.status !== "READY" || !p.connected) continue;
+      if (p.role !== "PLAYER" || !isCharacterPresent(p)) continue;
       const chamber = this.state.chambers.get(p.currentChamberId);
       if (!chamber) continue;
       const shared = vision.get(chamber.id) ?? new Set<string>();
@@ -22,13 +22,13 @@ export class FovService {
       if (!client.view) client.view = new StateView();
       const next = new Set<Schema>();
       const combat = this.state.combatState;
-      if (own?.role === 'MASTER' || (own?.status === 'READY' && own.currentChamberId === combat.chamberId)) next.add(combat);
+      if (own?.role === 'MASTER' || (own && isCharacterPresent(own) && own.currentChamberId === combat.chamberId)) next.add(combat);
       const visible = (entity: { id: string; currentChamberId: string; q: number; r: number; isHiddenByMaster: boolean }) =>
-        own?.role === "MASTER" || (own?.status === "READY" && entity.currentChamberId === own.currentChamberId && !entity.isHiddenByMaster
+        own?.role === "MASTER" || (own && isCharacterPresent(own) && entity.currentChamberId === own.currentChamberId && !entity.isHiddenByMaster
           && ((combat.active && combat.chamberId === own.currentChamberId && combat.turnOrder.includes(entity.id)) || vision.get(own.currentChamberId)?.has(getHexKey(entity.q, entity.r))));
       for (const p of this.state.players.values()) {
         // Lobby identities are available while assembling the party; READY tokens are culled.
-        if (p === own || own?.role === "MASTER" || (p.status !== "READY" && own?.status !== "READY") || (p.status === "READY" && visible(p))) next.add(p);
+        if (p === own || own?.role === "MASTER" || (p.connected && p.status !== "READY" && own?.status !== "READY") || (isCharacterPresent(p) && visible(p))) next.add(p);
       }
       for (const entity of [...this.state.monsters.values(), ...this.state.objects.values()]) if (visible(entity)) next.add(entity);
       const previous = this.membership.get(client) ?? new Set<Schema>();
@@ -36,7 +36,7 @@ export class FovService {
       for (const entity of next) if (!previous.has(entity)) client.view.add(entity);
       this.membership.set(client, next);
       // Vision contains floor coordinates only, never hidden object identifiers.
-      const cells = own?.role === "MASTER" ? [] : [...(vision.get(own?.currentChamberId ?? "") ?? [])].sort();
+      const cells = own && isCharacterPresent(own) ? [...(vision.get(own.currentChamberId) ?? [])].sort() : [];
       const payload = { chamberId: own?.currentChamberId ?? "", cells };
       const signature = JSON.stringify(payload);
       if (this.lastVision.get(client) !== signature) { client.send("ACTIVE_VISION", payload); this.lastVision.set(client, signature); }

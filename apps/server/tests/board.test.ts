@@ -28,6 +28,42 @@ function setup() {
   return { database, state, movement, master, addPlayer };
 }
 describe("movimento autoritativo e editor", () => {
+  it('releases absent cells, reserves reconnecting cells and chooses the nearest free return position', () => {
+    const { state, movement, addPlayer } = setup();
+    const a = addPlayer('Returning'), b = addPlayer('Occupant', 1, 0);
+    a.connected = false;
+    expect(movement.occupied(a.currentChamberId, a)).toBe(false);
+    a.reconnecting = true;
+    expect(movement.occupied(a.currentChamberId, a)).toBe(true);
+    a.reconnecting = false;
+    movement.masterMove({ entityId: b.id, chamberId: a.currentChamberId, q: a.q, r: a.r });
+    a.connected = true;
+    expect(movement.spawn(a)).toBe(true);
+    expect([a.q, a.r]).not.toEqual([b.q,b.r]);
+    expect(Math.max(Math.abs(a.q), Math.abs(a.r), Math.abs(a.q + a.r))).toBe(1);
+    expect(state.players.size).toBe(2);
+  });
+  it('waits for placement when the chamber is full, rejects movement and allows another chamber', () => {
+    const { state, movement, addPlayer, database } = setup();
+    const a = addPlayer('Waiting');
+    const chamber = state.chambers.get(a.currentChamberId)!;
+    const originalCells = [...chamber.cells.entries()];
+    chamber.cells.clear(); chamber.cells.set('0,0', 'OBSTACLE');
+    expect(movement.spawn(a)).toBe(false);
+    expect(a.awaitingPosition).toBe(true);
+    expect(movement.occupied(a.currentChamberId, a)).toBe(false);
+    expect(() => movement.request(a, { targetQ: 1, targetR: 0, revision: a.moveRevision })).toThrow();
+    expect(() => movement.masterMove({ entityId: a.id, chamberId: chamber.id, q: 0, r: 0 })).toThrow();
+    movement.masterMove({ entityId: a.id, chamberId: 'training-2', q: -4, r: 0 });
+    expect(a.awaitingPosition).toBe(false); expect(a.currentChamberId).toBe('training-2');
+    expect(database.db.select().from(characters).get()?.currentChamberId).toBe('training-2');
+    for (const [key, terrain] of originalCells) chamber.cells.set(key, terrain);
+  });
+  it('does not let offline characters block terrain edits', () => {
+    const { master, addPlayer } = setup();
+    const a = addPlayer('Absent'); a.connected = false;
+    expect(() => master.edit({ layer: 'TERRAIN', chamberId: a.currentChamberId, q: a.q, r: a.r, terrain: 'OBSTACLE' })).not.toThrow();
+  });
   it("consome passos, inicia 30s ao esgotar e renova sem depender de relógio do cliente", () => {
     const { movement, addPlayer } = setup(), p = addPlayer("Ana");
     movement.request(p, { targetQ: 1, targetR: 0, revision: 0 }, 1000);

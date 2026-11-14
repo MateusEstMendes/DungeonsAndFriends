@@ -1,3 +1,4 @@
+import { isCharacterPresent } from "@df/shared";
 import { Container, Graphics, type Application } from "pixi.js";
 import { gsap } from "gsap";
 import { findHexPath, getHexEdgeKey, getHexKey, hexToPixel, pixelToHex, type Hex } from "@df/shared";
@@ -62,7 +63,7 @@ export class BoardScene {
       if (signature !== layer.signature) { layer.terrain.renderChamber(chamber, board.debug); layer.walls.renderChamber(chamber); layer.signature = signature; }
       const objects = board.objects.filter(o => o.currentChamberId === chamber.id), objectsSignature = JSON.stringify(objects);
       if (objectsSignature !== layer.objectsSignature) { layer.objects.update(objects); layer.objectsSignature = objectsSignature; }
-      const players = game.players.filter(p => p.status === "READY").map(p => ({ ...p, name: p.characterName || p.name }));
+      const players = game.players.filter(isCharacterPresent).map(p => ({ ...p, name: p.characterName || p.name }));
       const entities = [...players, ...board.monsters].filter(e => e.currentChamberId === chamber.id), entitiesSignature = JSON.stringify([entities, board.selectedEntityId]);
       if (entitiesSignature !== layer.entitiesSignature) { layer.entities.update(entities, chamber, game.playerId, board.selectedEntityId); layer.entitiesSignature = entitiesSignature; }
       const active = new Set(board.visionChamberId === chamber.id ? board.activeVision : []);
@@ -103,7 +104,7 @@ export class BoardScene {
   }
   private entitiesAt(chamberId: string, hex: Hex) {
     const board = useBoardStore.getState(), game = useGameStore.getState();
-    return [...game.players.filter(p => p.status === "READY"), ...board.monsters, ...board.objects].filter(e => e.currentChamberId === chamberId && e.q === hex.q && e.r === hex.r);
+    return [...game.players.filter(isCharacterPresent), ...board.monsters, ...board.objects].filter(e => e.currentChamberId === chamberId && e.q === hex.q && e.r === hex.r);
   }
   private pointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;

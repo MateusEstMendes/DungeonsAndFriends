@@ -31,7 +31,7 @@ function attach(room: Room<unknown, RoomState>) {
   let lastPlayers = "";
   let networkErrorNotice: string | undefined;
   const sync = (state: RoomState) => {
-    const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected, characterId:player.characterId, characterName:player.characterName, raceId:player.raceId, archetypeId:player.archetypeId, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, defense:player.defense, speed:player.speed, tokenUrl:player.tokenUrl, portraitUrl:player.portraitUrl, currentChamberId:player.currentChamberId, q:player.q, r:player.r, moveCooldownEndsAt:player.moveCooldownEndsAt, remainingSteps:player.remainingSteps, moveRevision:player.moveRevision, isHiddenByMaster:player.isHiddenByMaster }));
+    const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected, reconnecting: player.reconnecting, awaitingPosition: player.awaitingPosition, characterId:player.characterId, characterName:player.characterName, raceId:player.raceId, archetypeId:player.archetypeId, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, defense:player.defense, speed:player.speed, tokenUrl:player.tokenUrl, portraitUrl:player.portraitUrl, currentChamberId:player.currentChamberId, q:player.q, r:player.r, moveCooldownEndsAt:player.moveCooldownEndsAt, remainingSteps:player.remainingSteps, moveRevision:player.moveRevision, isHiddenByMaster:player.isHiddenByMaster }));
     const serialized = JSON.stringify(players);
     if (serialized !== lastPlayers) { lastPlayers = serialized; useGameStore.setState({ players }); }
     const own = state.players.get(useGameStore.getState().playerId);
@@ -84,12 +84,19 @@ function attach(room: Room<unknown, RoomState>) {
     networkErrorNotice = undefined;
     ping();
   });
+  let kickedNotice = '';
+  room.onMessage('PLAYER_KICKED', (message: string) => {
+    kickedNotice = message;
+    room.reconnection.enabled = false;
+    persistReconnectionToken('');
+    useUIStore.getState().setNotice(message);
+  });
   room.onLeave(() => {
     if (active !== room) return;
     active = undefined;
     if (heartbeat) clearInterval(heartbeat);
     useGameStore.setState({ connectionState: "DISCONNECTED", latencyMs: null });
-    useUIStore.setState({ screen: "LOBBY", notice: "Conexão encerrada. Você pode tentar continuar sua sessão." });
+    useUIStore.setState({ screen: "LOBBY", notice: kickedNotice || "Conexão encerrada. Você pode tentar continuar sua sessão." });
   });
   room.onError((_code, message) => {
     networkErrorNotice = message ?? "Erro de conexão.";

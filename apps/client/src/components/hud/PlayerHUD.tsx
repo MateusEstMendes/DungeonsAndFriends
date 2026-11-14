@@ -7,7 +7,7 @@ export function PlayerHUD() {
   const mode = useBoardStore(s => s.explorationMode);
   const [now, setNow] = useState(Date.now()), [q, setQ] = useState("0"), [r, setR] = useState("0");
   useEffect(() => { const interval = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(interval); }, []);
-  if (!own) return null;
+  if (!own || own.awaitingPosition) return null;
   const seconds = Math.max(0, Math.ceil((own.moveCooldownEndsAt - now) / 1000));
   const steps = seconds === 0 && own.remainingSteps === 0 ? own.speed : own.remainingSteps;
   return <>

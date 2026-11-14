@@ -1,6 +1,6 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { MasterEditSchema, MasterMoveSchema, RotateObjectSchema, EntityHiddenSchema, DeleteEntitySchema, ExplorationModeSchema, HEX_DIRECTIONS, getHexKey, getHexEdgeKey, type RoomState } from "@df/shared";
+import { isCharacterPresent, MasterEditSchema, MasterMoveSchema, RotateObjectSchema, EntityHiddenSchema, DeleteEntitySchema, ExplorationModeSchema, HEX_DIRECTIONS, getHexKey, getHexEdgeKey, type RoomState } from "@df/shared";
 import { characters, editorHistory, rooms } from "../../db/schema.js";
 import { readBoard, loadBoard, writeBoard, type BoardSnapshot, type Database } from "../../services/boardRepository.js";
 import type { MovementHandler } from "./movement.js";
@@ -33,7 +33,7 @@ export class MasterHandler {
     mutate(after);
     assertObjectStacks(before, after);
     // Undoing terrain/spawn edits must never entomb a character that moved since the edit.
-    for (const p of this.state.players.values()) if (p.status === "READY") {
+    for (const p of this.state.players.values()) if (isCharacterPresent(p)) {
       const cell = after.cells.find(c => c.chamberId === p.currentChamberId && c.q === p.q && c.r === p.r);
       if (!cell || cell.terrain === "OBSTACLE" || cell.terrain === "DEEP_WATER") throw new Error("Há um personagem nessa célula.");
     }
@@ -111,7 +111,7 @@ export class MasterHandler {
     if (!entry) throw new Error(redo ? "Nada para refazer." : "Nada para desfazer.");
     const data: BoardSnapshot = JSON.parse(redo ? entry.afterJson : entry.beforeJson);
     assertObjectStacks(readBoard(this.database), data);
-    for (const p of this.state.players.values()) if (p.status === "READY") {
+    for (const p of this.state.players.values()) if (isCharacterPresent(p)) {
       const cell = data.cells.find(c => c.chamberId === p.currentChamberId && c.q === p.q && c.r === p.r);
       const monster = data.objects.some(e => e.kind === "MONSTER" && e.chamberId === p.currentChamberId && e.q === p.q && e.r === p.r);
       if (!cell || ["OBSTACLE", "DEEP_WATER"].includes(cell.terrain) || monster) throw new Error("Mova o personagem antes de restaurar essa edição.");

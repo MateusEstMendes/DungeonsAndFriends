@@ -12,6 +12,7 @@ export function CombatOverlay() {
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(timer); }, []);
   useEffect(() => setMenu(null), [c.activeParticipantId, c.encounterId]);
   const actor = store.participants.find(p => p.id === c.activeParticipantId);
+  const awaitingAdmission = c.active && game.role === 'PLAYER' && !c.turnOrder.includes(game.playerId);
   const ownTurn = actor && (game.role === 'MASTER' ? actor.kind === 'MONSTER' && store.manualMonsterId === actor.id : actor.id === game.playerId);
   const disabled = !c.active || !ownTurn || c.isPaused || store.pending || now < store.busyUntil || game.connectionState !== 'CONNECTED';
   const side = game.role === 'MASTER' && actor?.kind === 'MONSTER' && store.manualMonsterId === actor.id ? 'MONSTER' : 'PLAYER';
@@ -29,7 +30,7 @@ export function CombatOverlay() {
   }
   const last = store.events.at(-1);
   return <div className="combat-overlay">
-    <div className="combat-heading"><span className="eyebrow">Arena · {({ CAVE: 'Caverna', FOREST: 'Floresta', TAVERN: 'Taverna', DUNGEON: 'Masmorra' } as Record<string,string>)[c.biome] ?? c.biome}</span><h1>Rodada {c.round}</h1><p role="status">{!c.active ? 'Encontro encerrado' : c.isPaused ? 'Combate pausado pelo Mestre' : ownTurn ? 'Seu turno. Escolha sua ação.' : `Turno de ${actor?.name ?? '…'}`}</p></div>
+    <div className="combat-heading"><span className="eyebrow">Arena · {({ CAVE: 'Caverna', FOREST: 'Floresta', TAVERN: 'Taverna', DUNGEON: 'Masmorra' } as Record<string,string>)[c.biome] ?? c.biome}</span><h1>Rodada {c.round}</h1><p role="status">{!c.active ? 'Encontro encerrado' : awaitingAdmission ? 'Aguardando inclusão no combate pelo mestre.' : c.isPaused ? 'Combate pausado pelo Mestre' : ownTurn ? 'Seu turno. Escolha sua ação.' : `Turno de ${actor?.name ?? '…'}`}</p></div>
     <div className="combat-allies" aria-label="Aliados e alvos de cura">{store.participants.filter(p => p.kind === 'PLAYER').map(p => {
       const player = game.players.find(a => a.id === p.id);
       return <button key={p.id} className="combat-ally" aria-pressed={store.targetId === p.id} disabled={p.hp <= 0} onClick={() => useCombatStore.setState({ targetId: p.id })}>

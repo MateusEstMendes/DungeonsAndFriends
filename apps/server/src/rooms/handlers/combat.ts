@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { calculateTotalActions, getModifier, hexDistance, isMagicAttack, resolveAttack, resolveFlee, validateAction,
+import { calculateTotalActions, getModifier, hexDistance, isCharacterPresent, isMagicAttack, resolveAttack, resolveFlee, validateAction,
   PHYSICAL_ATTACKS, MAGICAL_ATTACKS, type AttackType, type CombatAction, type CombatantStats, type PlayerSchema, type RoomState } from '@df/shared';
 import { activeBuffs, characters, combatEncounters, combatParticipants, monstersCatalog } from '../../db/schema.js';
 import type { Database } from '../../services/boardRepository.js';
@@ -11,6 +11,7 @@ interface Participant extends CombatantStats {
   speed: number; mp: number; maxMp: number; archetypeId: string; attackType: AttackType; baseDamage: number;
   cooldowns: Record<string, number>; potions: number;
   berserkUntilRound?: number;
+  absent?: boolean;
 }
 type Send = (name: string, data: unknown, audience: 'MASTER' | string) => void;
 
@@ -24,7 +25,7 @@ export class CombatHandler {
     private send: Send, private refresh: () => void, private dice = roll, private now = Date.now) {}
 
   proximity(player: PlayerSchema) {
-    if (this.state.combatState.active || player.status !== 'READY') return;
+    if (this.state.combatState.active || !isCharacterPresent(player)) return;
     const nearby = [...this.state.monsters.values()].filter(m => !m.isHiddenByMaster && m.currentChamberId === player.currentChamberId && hexDistance(player, m) <= 2);
     const signature = nearby.map(m => m.id).sort().join(',');
     if (signature && this.alerts.get(player.id) !== signature) this.send('PROXIMITY_ALERT', {
@@ -38,7 +39,7 @@ export class CombatHandler {
     if (typeof chamberId !== 'string' || !this.state.chambers.has(chamberId) || this.state.combatState.active) throw new Error('Encontro indisponível.');
     const roster = new Map<string, Participant>();
     for (const player of this.state.players.values()) {
-      if (player.status !== 'READY' || player.currentChamberId !== chamberId || player.hp <= 0) continue;
+      if (!isCharacterPresent(player) || player.currentChamberId !== chamberId || player.hp <= 0) continue;
       const row = this.database.db.select().from(characters).where(eq(characters.id, player.characterId)).get();
       if (!row) continue;
       roster.set(player.id, { id: player.id, kind: 'PLAYER', name: player.characterName, hp: row.hp, maxHp: row.maxHp, mp: row.mp, maxMp: row.maxMp,
@@ -79,7 +80,7 @@ export class CombatHandler {
     const action = this.parseAction(data);
     if (!validateAction(action, c.actionIndex, actor.str, actor.int)) throw new Error('Ação extra incompatível com FOR/INT.');
     const target = 'targetId' in action && action.targetId ? this.participants.get(action.targetId) : actor;
-    if (!target || target.hp <= 0) throw new Error('Alvo inválido.');
+    if (!target || target.absent || target.hp <= 0) throw new Error('Alvo inválido.');
     if (action.type === 'ATTACK' && target.kind === actor.kind) throw new Error('Selecione um inimigo.');
     if ((action.type === 'ITEM' || action.type === 'DEFEND') && target.kind !== actor.kind) throw new Error('Selecione um aliado.');
     if (action.type === 'FLEE' && c.fleeMode === 'BLOCKED') throw new Error('A fuga está bloqueada pelo Mestre.');
@@ -125,7 +126,7 @@ export class CombatHandler {
         const heal = Math.min(25, target.maxHp - target.hp); actor.potions--; target.hp += heal; Object.assign(event, { healAmount: heal, outcome: 'HEALED' });
       } else {
         const value = dice(100);
-        const fled = resolveFlee(actor.speed, [...this.participants.values()].filter(p => p.kind !== actor.kind && p.hp > 0).map(p => p.speed), value,
+        const fled = resolveFlee(actor.speed, [...this.participants.values()].filter(p => !p.absent && p.kind !== actor.kind && p.hp > 0).map(p => p.speed), value,
           { fleeBlocked: c.fleeMode === 'BLOCKED', guaranteedFlee: c.fleeMode === 'GUARANTEED_100' });
         Object.assign(event, { outcome: fled ? 'FLED' : 'FLEE_FAILED', roll: value });
         if (fled) this.finish('FLED');
@@ -160,7 +161,37 @@ export class CombatHandler {
     if (c.isProcessingAction && this.now() >= this.unlockAt) c.isProcessingAction = false;
     // Monsters are controlled manually by the referee, preserving the current turn until ordered.
   }
-  private alive(kind: Participant['kind']) { return [...this.participants.values()].filter(p => p.kind === kind && p.hp > 0); }
+  removePlayer(id: string) {
+    const c = this.state.combatState, participant = this.participants.get(id);
+    if (!c.active || !participant || participant.absent || participant.kind !== 'PLAYER') return;
+    this.change(() => {
+      participant.absent = true;
+      if (!this.alive('PLAYER').length) this.finish('ENDED');
+      else if (c.activeParticipantId === id) this.advance();
+      const index = c.turnOrder.indexOf(id);
+      if (index >= 0) c.turnOrder.splice(index, 1);
+    });
+  }
+  addPlayer(input: unknown) {
+    this.requireActive();
+    const id = this.object(input).targetPlayerId;
+    const player = typeof id === 'string' ? this.state.players.get(id) : undefined;
+    const c = this.state.combatState;
+    if (!player || !player.connected || !isCharacterPresent(player) || player.currentChamberId !== c.chamberId || player.hp <= 0 || c.turnOrder.includes(player.id)) throw new Error('Personagem indisponível para este combate.');
+    const row = this.database.db.select().from(characters).where(eq(characters.id, player.characterId)).get();
+    if (!row) throw new Error('Ficha indisponível.');
+    this.change(() => {
+      const previous = this.participants.get(player.id);
+      this.participants.set(player.id, previous ? { ...previous, absent: false, hp: row.hp, mp: row.mp } : {
+        id: player.id, kind: 'PLAYER', name: player.characterName, hp: row.hp, maxHp: row.maxHp, mp: row.mp, maxMp: row.maxMp,
+        str: row.finalStr, dex: row.finalDex, int: row.finalInt, dexMod: getModifier(row.finalDex), speed: row.speed,
+        raceId: row.raceId, archetypeId: row.archetypeId, passiveDodge: row.dodgeChance, flatDR: row.flatDr,
+        baseDamage: 6, attackType: 'SLASHING', cooldowns: {}, potions: 2,
+      });
+      c.turnOrder.push(player.id);
+    });
+  }
+  private alive(kind: Participant['kind']) { return [...this.participants.values()].filter(p => !p.absent && p.kind === kind && p.hp > 0); }
   private requireActive() { if (!this.state.combatState.active) throw new Error('Não há combate ativo.'); }
   private beginTurn() {
     const c = this.state.combatState, actor = this.participants.get(c.activeParticipantId)!;
@@ -171,7 +202,8 @@ export class CombatHandler {
     const c = this.state.combatState; let index = c.turnOrder.indexOf(c.activeParticipantId);
     for (let i = 0; i < c.turnOrder.length; i++) {
       index = (index + 1) % c.turnOrder.length; if (index === 0) c.round++;
-      if (this.participants.get(c.turnOrder[index])!.hp > 0) { c.activeParticipantId = c.turnOrder[index]; this.beginTurn(); return; }
+      const participant = this.participants.get(c.turnOrder[index])!;
+      if (!participant.absent && participant.hp > 0) { c.activeParticipantId = c.turnOrder[index]; this.beginTurn(); return; }
     }
   }
   private finish(status: 'ENDED' | 'FLED') {
@@ -196,10 +228,10 @@ export class CombatHandler {
   }
   private syncVitals() { for (const p of this.participants.values()) { const entity = this.state.players.get(p.id); if (entity) { entity.hp = p.hp; entity.mp = p.mp; } } }
   private publish() {
-    this.send('COMBAT_ROSTER', { encounterId: this.state.combatState.encounterId, participants: [...this.participants.values()], cutoffs: this.cutoffs }, this.state.combatState.chamberId);
+    this.send('COMBAT_ROSTER', this.snapshot(), this.state.combatState.chamberId);
     this.refresh();
   }
-  snapshot() { return { encounterId: this.state.combatState.encounterId, participants: [...this.participants.values()], cutoffs: this.cutoffs }; }
+  snapshot() { return { encounterId: this.state.combatState.encounterId, participants: [...this.participants.values()].filter(p => !p.absent), cutoffs: this.cutoffs }; }
   private persist(create = false) {
     const c = this.state.combatState;
     const values = { status: this.encounterStatus, roomId: this.roomId, chamberId: c.chamberId, biome: c.biome, round: c.round, turnOrderJson: JSON.stringify([...c.turnOrder]), activeParticipantId: c.activeParticipantId,

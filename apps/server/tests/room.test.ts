@@ -4,7 +4,7 @@ import { boot, type ColyseusTestServer } from "@colyseus/testing";
 import { Server } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { createServer } from "node:http";
-import { MAX_CHARACTER_MESSAGE_BYTES, PROTOCOL_VERSION, SessionCredentialsPayloadSchema } from "@df/shared";
+import { isCharacterPresent, MAX_CHARACTER_MESSAGE_BYTES, PROTOCOL_VERSION, SessionCredentialsPayloadSchema } from "@df/shared";
 import { openDatabase } from "../src/db/index.js";
 import { gameRoomClass, type GameRoom } from "../src/rooms/GameRoom.js";
 import { prepareHost } from "../src/host.js";
@@ -196,7 +196,7 @@ describe.sequential("sala autoritativa", () => {
     expect(await denied).toContain("autorizada");
     await ana.leave(); await nilo.leave(); await master.leave();
   });
-  it('restores an ACTIVE encounter when recreating the authoritative room and delivers the same turn to rejoining clients', async () => {
+  it('ends the encounter when its last hero leaves and keeps it ended after restart', async () => {
     const saved = database.db.select().from(players).all().find(p => p.name === 'Ana')!;
     const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
     const ana = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
@@ -218,15 +218,139 @@ describe.sequential("sala autoritativa", () => {
     const before = room.state.combatState.toJSON(), code = room.roomId;
     await ana.leave(); await master.leave(); await testServer.cleanup();
     room = await testServer.createRoom<GameRoom>('game', { bootstrapKey: 'local-key', roomCode: code });
-    expect(room.state.combatState.toJSON()).toEqual(before);
+    expect(room.state.combatState.active).toBe(false);
+    expect(room.state.combatState.turnOrder.includes(saved.id)).toBe(false);
     const referee = await testServer.connectTo(room, { password: 'master-test-password', ...version });
     const rejoined = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
-    await until(() => rejoined.state.combatState?.turnToken === before.turnToken);
-    expect(rejoined.state.combatState.remainingActions).toBe(before.remainingActions);
-    expect([...rejoined.state.combatState.turnOrder]).toEqual(before.turnOrder);
-    referee.send('MASTER_END_COMBAT'); await until(() => !room.state.combatState.active);
+    await until(() => rejoined.state.players.get(saved.id)?.status === 'READY');
+    expect(room.state.combatState.active).toBe(false);
     await rejoined.leave(); await referee.leave();
   });
+  it('preserves a kicked character and requires new approval, including after cancelling a request', async () => {
+    const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const saved = database.db.select().from(players).all().find(p => p.name === 'Ana')!;
+    const client = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    const p = room.state.players.get(saved.id)!;
+    const characterId = p.characterId, hp = p.hp, q = p.q, r = p.r;
+    const nativeToken = client.reconnectionToken;
+    const denied = client.waitForMessage('ACTION_ERROR');
+    client.send('MASTER_KICK_PLAYER', { targetPlayerId: p.id });
+    expect(await denied).toContain('autorizada');
+    const kicked = client.waitForMessage('PLAYER_KICKED');
+    master.send('MASTER_KICK_PLAYER', { targetPlayerId: p.id });
+    expect(await kicked).toContain('preservada');
+    await until(() => !p.connected && p.status === 'PENDING_APPROVAL');
+    expect(isCharacterPresent(p)).toBe(false);
+    expect(database.db.select().from(characters).all().find(c => c.id === characterId)?.hp).toBe(hp);
+    await expect(testServer.sdk.reconnect(nativeToken)).rejects.toThrow();
+    const retry = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    expect(p.status).toBe('PENDING_APPROVAL');
+    const noMove = retry.waitForMessage('ACTION_ERROR');
+    retry.send('REQUEST_MOVE', { targetQ: q + 1, targetR: r, revision: p.moveRevision });
+    await noMove; expect([p.q,p.r]).toEqual([q,r]);
+    await retry.leave(); await until(() => !p.connected);
+    expect(room.state.players.has(p.id)).toBe(true);
+    const approved = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    master.send('APPROVE_PLAYER', { targetPlayerId: p.id });
+    await until(() => p.status === 'READY');
+    expect(p.characterId).toBe(characterId); expect(p.hp).toBe(hp);
+    expect(database.db.select().from(characters).all().filter(c => c.playerId === p.id)).toHaveLength(1);
+    await approved.leave(); await master.leave();
+  });
+
+  it('keeps presence during a drop and lets the master revoke its reconnection reservation', async () => {
+    const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const saved = database.db.select().from(players).all().find(p => p.name === 'Ana')!;
+    const client = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    const p = room.state.players.get(saved.id)!;
+    client.reconnection.enabled = false;
+    const token = client.reconnectionToken;
+    client.connection.close();
+    await until(() => !p.connected && p.reconnecting);
+    expect(isCharacterPresent(p)).toBe(true);
+    const restored = await testServer.sdk.reconnect(token);
+    await until(() => p.connected && !p.reconnecting);
+    expect(isCharacterPresent(p)).toBe(true);
+    restored.reconnection.enabled = false;
+    const nextToken = restored.reconnectionToken;
+    restored.connection.close(); await until(() => p.reconnecting);
+    master.send('MASTER_KICK_PLAYER', { targetPlayerId: p.id });
+    await until(() => !p.reconnecting && p.status === 'PENDING_APPROVAL');
+    expect(isCharacterPresent(p)).toBe(false);
+    await expect(testServer.sdk.reconnect(nextToken)).rejects.toThrow();
+    const retry = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    master.send('APPROVE_PLAYER', { targetPlayerId: p.id });
+    await until(() => p.status === 'READY');
+    await retry.leave(); await master.leave();
+  });
+
+  it('removes a departed hero from combat and requires the master to reinsert the returning hero', async () => {
+    const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const saved = database.db.select().from(players).all().find(p => p.name === 'Ana')!;
+    const ana = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    const a = room.state.players.get(saved.id)!;
+    const other = await testServer.connectTo(room, { name: 'Companheiro', ...version });
+    const b = [...room.state.players.values()].find(p => p.name === 'Companheiro')!;
+    master.send('APPROVE_PLAYER', { targetPlayerId: b.id }); await until(() => b.status === 'NEEDS_CHARACTER_CREATION');
+    other.send('SUBMIT_CHARACTER', characterPayload()); await until(() => b.status === 'READY');
+    master.send('START_COMBAT', { chamberId: a.currentChamberId }); await until(() => room.state.combatState.active);
+    const c = room.state.combatState;
+    if (c.activeParticipantId !== a.id) {
+      master.send('MASTER_REORDER_INITIATIVE', { turnOrder: [c.activeParticipantId, a.id, ...c.turnOrder.filter(id => id !== c.activeParticipantId && id !== a.id)] });
+      master.send('MASTER_FORCE_TURN_SKIP'); await until(() => c.activeParticipantId === a.id);
+    }
+    await ana.leave(); await until(() => !a.connected && !c.turnOrder.includes(a.id));
+    expect(c.active).toBe(true); expect(c.activeParticipantId).not.toBe(a.id);
+    const rejoined = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    expect(isCharacterPresent(a)).toBe(true); expect(c.turnOrder.includes(a.id)).toBe(false);
+    const token = c.turnToken, actor = c.activeParticipantId;
+    master.send('MASTER_ADD_COMBAT_PLAYER', { targetPlayerId: a.id }); await until(() => c.turnOrder.includes(a.id));
+    expect(c.activeParticipantId).toBe(actor); expect(c.turnToken).toBe(token); expect(c.turnOrder.at(-1)).toBe(a.id);
+    master.send('MASTER_KICK_PLAYER', { targetPlayerId: a.id }); await until(() => !c.turnOrder.includes(a.id));
+    expect(c.active).toBe(true);
+    await rejoined.leave();
+    master.send('MASTER_END_COMBAT'); await until(() => !c.active);
+    await other.leave(); await master.leave();
+  });
+
+  it('expires presence after the 60-second grace period and allows normal return without approval', async () => {
+    const saved = database.db.select().from(players).all().find(p => p.name === 'Companheiro')!;
+    const client = await testServer.connectTo(room, { name: saved.name, sessionToken: saved.sessionToken, ...version });
+    const p = room.state.players.get(saved.id)!;
+    client.reconnection.enabled = false;
+    client.connection.close(); await until(() => p.reconnecting);
+    expect(isCharacterPresent(p)).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 60_100));
+    await until(() => !p.reconnecting);
+    expect(p.connected).toBe(false); expect(isCharacterPresent(p)).toBe(false);
+    expect(p.status).toBe('READY');
+    const returned = await testServer.connectTo(room, { name: saved.name, sessionToken: saved.sessionToken, ...version });
+    expect(isCharacterPresent(p)).toBe(true);
+    expect(p.characterId).toBe(saved.characterId);
+    await returned.leave();
+  }, 70_000);
+
+  it('keeps a returning player unplaced until the master chooses a valid cell in another chamber', async () => {
+    const saved = database.db.select().from(players).all().find(p => p.name === 'Companheiro')!;
+    const chamber = room.state.chambers.get('training-1')!;
+    const cells = [...chamber.cells.entries()]; chamber.cells.clear();
+    const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    try {
+      const client = await testServer.connectTo(room, { name: saved.name, sessionToken: saved.sessionToken, ...version });
+      const p = room.state.players.get(saved.id)!;
+      expect(p.connected).toBe(true); expect(p.awaitingPosition).toBe(true);
+      expect(isCharacterPresent(p)).toBe(false);
+      const error = master.waitForMessage('ACTION_ERROR');
+      master.send('MASTER_POSITION_PLAYER', { entityId: p.id, chamberId: 'training-1', q: 0, r: 0 });
+      await error; expect(p.awaitingPosition).toBe(true);
+      master.send('MASTER_POSITION_PLAYER', { entityId: p.id, chamberId: 'training-2', q: -4, r: 0 });
+      await until(() => !p.awaitingPosition);
+      expect(isCharacterPresent(p)).toBe(true); expect(p.currentChamberId).toBe('training-2');
+      await until(() => client.state.players.get(p.id)?.currentChamberId === 'training-2');
+      await client.leave();
+    } finally { for (const [key, terrain] of cells) chamber.cells.set(key, terrain); await master.leave(); }
+  });
+
   it("restaura sala e aprovação após recriar a sala autoritativa", async () => {
     const saved = database.db.select().from(players).all().find(p => p.name === "Ana")!;
     const code = room.roomId;
@@ -240,14 +364,19 @@ describe.sequential("sala autoritativa", () => {
     room = await testServer.createRoom<GameRoom>("game", { bootstrapKey: "local-key", roomCode: code });
     expect(room.state.players.get(withoutCharacter.id)?.status).toBe("NEEDS_CHARACTER_CREATION");
     expect(database.db.select().from(sessions).all().filter(s => s.status === "ACTIVE")).toHaveLength(1);
+    expect(room.state.players.get(saved.id)?.connected).toBe(false);
     const restored = await testServer.connectTo(room, { name: "Ignored", sessionToken: saved.sessionToken, ...version });
-    expect(room.state.players.get(saved.id)?.status).toBe("READY");
+    expect(room.state.players.get(saved.id)?.status).toBe("PENDING_APPROVAL");
+    expect(room.state.players.get(saved.id)?.characterId).toBe(saved.characterId);
+    const referee = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    referee.send('APPROVE_PLAYER', { targetPlayerId: saved.id });
+    await until(() => room.state.players.get(saved.id)?.status === 'READY');
     expect(room.state.players.get(saved.id)?.connected).toBe(true);
     expect(room.state.players.get(saved.id)?.characterName).toBe("Ael");
     expect(room.state.players.get(saved.id)?.hp).toBe(110);
     const rejected = database.db.select().from(players).all().find(p => p.name === "Bia")!;
     await expect(testServer.connectTo(room, { name: "Bia", sessionToken: rejected.sessionToken, ...version })).rejects.toThrow();
-    await restored.leave();
+    await restored.leave(); await referee.leave();
   });
 
 });

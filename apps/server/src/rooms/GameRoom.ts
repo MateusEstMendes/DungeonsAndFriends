@@ -1,5 +1,5 @@
 import { Room, ServerError, type AuthContext, type Client } from "@colyseus/core";
-import { ApprovalDecisionPayloadSchema, JoinRequestPayloadSchema, MasterAuthPayloadSchema, PlayerSchema, RoomState, type PlayerRole, type SessionCredentialsPayload } from "@df/shared";
+import { ApprovalDecisionPayloadSchema, JoinRequestPayloadSchema, MasterAuthPayloadSchema, MasterMoveSchema, isCharacterPresent, PlayerSchema, RoomState, type PlayerRole, type SessionCredentialsPayload } from "@df/shared";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { openDatabase } from "../db/index.js";
@@ -22,6 +22,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
   private bindings = new Map<string, string>();
   private ips = new Map<string, string>();
   private heartbeats = new Map<string, number>();
+  private reconnectCancellations = new Map<string, () => void>();
   private authAttempts = new Map<string, { count: number; resetAt: number }>();
   private fov!: FovService;
   private movement!: MovementHandler;
@@ -50,15 +51,15 @@ export class GameRoom extends Room<{ state: RoomState }> {
       Object.assign(player, { id: saved.id, name: saved.name, role: saved.id === record.id ? "MASTER" : "PLAYER", status: saved.approvalStatus === "APPROVED" && saved.id !== record.id ? "NEEDS_CHARACTER_CREATION" : saved.approvalStatus, connected: false });
       this.restoreCharacter(player, saved.characterId);
       this.state.players.set(player.id, player);
-      if (player.status === "READY") this.movement.spawn(player);
     }
     this.combat = new CombatHandler(this.state, this.services.database, record.id, (name, data, audience) => {
       for (const client of this.clients) {
         const p = this.state.players.get(this.bindings.get(client.sessionId) ?? '');
-        if (p?.role === 'MASTER' || (audience !== 'MASTER' && p?.currentChamberId === audience)) client.send(name, data);
+        if (p?.role === 'MASTER' || (audience !== 'MASTER' && p && isCharacterPresent(p) && p.currentChamberId === audience)) client.send(name, data);
       }
     }, () => this.refreshViews());
     this.combat.restore();
+    for (const player of this.state.players.values()) this.combat.removePlayer(player.id);
     const master = new MasterHandler(this.state, this.services.database, record.id, this.movement, () => this.refreshViews());
     const command = (name: string, masterOnly: boolean, action: (player: PlayerSchema, input: unknown) => void) => {
       this.onMessage(name, (client, input) => {
@@ -79,6 +80,15 @@ export class GameRoom extends Room<{ state: RoomState }> {
     command('MASTER_SET_FLEE_MODE', true, (_p, input) => this.combat.fleeMode(input));
     command('MASTER_REORDER_INITIATIVE', true, (_p, input) => this.combat.reorder(input));
     command('MASTER_FORCE_TURN_SKIP', true, () => this.combat.skip());
+    command('MASTER_ADD_COMBAT_PLAYER', true, (_p, input) => this.combat.addPlayer(input));
+    command('MASTER_KICK_PLAYER', true, (_p, input) => this.kick(input));
+    command('MASTER_POSITION_PLAYER', true, (_p, input) => {
+      const data = MasterMoveSchema.parse(input);
+      const player = this.state.players.get(data.entityId);
+      if (!player?.awaitingPosition) throw new Error('Este personagem não aguarda posicionamento.');
+      this.movement.masterMove(data);
+      this.notifyCombat(player);
+    });
     command('MASTER_MANUAL_MONSTER_ACTION', true, (p, input) => this.combat.action(p, input, true));
     command('MASTER_END_COMBAT', true, () => this.combat.end());
     command('MASTER_SET_D20_CUTOFFS', true, (_p, input) => this.combat.setCutoffs(input));
@@ -168,10 +178,12 @@ export class GameRoom extends Room<{ state: RoomState }> {
     }
     this.bindings.set(client.sessionId, player.id);
     player.connected = true;
+    player.reconnecting = false;
+    if (player.status === 'READY') this.movement.spawn(player);
     db.update(players).set({ sessionToken: auth.sessionToken, reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client, auth.sessionToken, player);
     this.refreshViews();
-    if (this.state.combatState.active && (player.role === 'MASTER' || player.currentChamberId === this.state.combatState.chamberId)) client.send('COMBAT_ROSTER', this.combat.snapshot());
+    if (this.state.combatState.active && (player.role === 'MASTER' || (isCharacterPresent(player) && player.currentChamberId === this.state.combatState.chamberId))) client.send('COMBAT_ROSTER', this.combat.snapshot());
     this.log("join", client);
   }
 
@@ -195,11 +207,13 @@ export class GameRoom extends Room<{ state: RoomState }> {
   }
 
   private restoreCharacter(player: PlayerSchema, characterId: string | null) {
-    if (player.role !== "PLAYER" || player.status === "REJECTED" || player.status === "PENDING_APPROVAL") return;
+    if (player.role !== "PLAYER") return;
+    const approval = player.status;
     const character = characterId ? this.services.database.db.select().from(characters)
       .where(and(eq(characters.id, characterId), eq(characters.playerId, player.id), eq(characters.roomId, this.roomRecord.id))).get() : undefined;
     if (character) this.syncCharacter(player, character);
     else player.status = "NEEDS_CHARACTER_CREATION";
+    if (approval === 'PENDING_APPROVAL' || approval === 'REJECTED') player.status = approval;
   }
 
   private submitCharacter(client: Client, input: unknown) {
@@ -234,7 +248,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     const parsed = ApprovalDecisionPayloadSchema.safeParse(input);
     if (master?.role !== "MASTER" || !parsed.success) { client.send("ACTION_ERROR", "Ação não autorizada ou inválida."); return; }
     const player = this.state.players.get(parsed.data.targetPlayerId);
-    if (!player || player.role !== "PLAYER" || player.status !== "PENDING_APPROVAL") { client.send("ACTION_ERROR", "O pedido não está mais pendente."); return; }
+    if (!player || player.role !== "PLAYER" || player.status !== "PENDING_APPROVAL" || (!player.connected && !player.reconnecting)) { client.send("ACTION_ERROR", "O pedido não está mais pendente."); return; }
     const status = approve ? "NEEDS_CHARACTER_CREATION" : "REJECTED";
     // A autorização persistida é distinta da etapa de criação de ficha no estado de rede.
     const sessionToken = approve ? signSessionToken({ playerId: player.id, roomId: this.roomRecord.id, role: "PLAYER" }, this.services.tokenSecret) : undefined;
@@ -242,29 +256,64 @@ export class GameRoom extends Room<{ state: RoomState }> {
       db.update(players).set({ approvalStatus: approve ? "APPROVED" : "REJECTED", ...(sessionToken ? { sessionToken } : {}), lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     });
     player.status = status;
+    if (approve) {
+      const saved = this.services.database.db.select().from(players).where(eq(players.id, player.id)).get()!;
+      this.restoreCharacter(player, saved.characterId);
+      if (player.characterId) this.movement.spawn(player);
+    }
     this.refreshViews();
     for (const target of this.clients) if (this.bindings.get(target.sessionId) === player.id) {
-      target.send("APPROVAL_RESULT", status);
+      target.send("APPROVAL_RESULT", player.status);
       if (approve) this.credentials(target);
     }
+    if (approve) this.notifyCombat(player);
     this.log(approve ? "approve" : "reject", client);
+  }
+
+  private notifyCombat(player: PlayerSchema) {
+    if (!this.state.combatState.active || !isCharacterPresent(player) || player.currentChamberId !== this.state.combatState.chamberId) return;
+    for (const client of this.clients) if (this.bindings.get(client.sessionId) === player.id) client.send('COMBAT_ROSTER', this.combat.snapshot());
+  }
+
+  private kick(input: unknown) {
+    const { targetPlayerId } = ApprovalDecisionPayloadSchema.parse(input);
+    const player = this.state.players.get(targetPlayerId);
+    if (!player || player.role !== 'PLAYER' || !player.characterId) throw new Error('Selecione um personagem.');
+    this.combat.removePlayer(player.id);
+    this.services.database.db.update(players).set({ approvalStatus: 'PENDING_APPROVAL', reconnectionToken: null, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
+    player.connected = false; player.reconnecting = false; player.status = 'PENDING_APPROVAL';
+    for (const [sessionId, id] of this.bindings) if (id === player.id) {
+      this.bindings.delete(sessionId);
+      this.reconnectCancellations.get(sessionId)?.();
+      this.reconnectCancellations.delete(sessionId);
+      const target = this.clients.find(client => client.sessionId === sessionId);
+      target?.send('PLAYER_KICKED', 'O Mestre removeu você da sala. Sua ficha foi preservada. Solicite entrada novamente para voltar.');
+      target?.leave(4000);
+    }
+    this.refreshViews();
   }
 
   async onDrop(client: Client) {
     const player = this.state.players.get(this.bindings.get(client.sessionId)!);
-    if (player) player.connected = false;
+    if (!player) return;
+    player.connected = false;
+    player.reconnecting = true;
     this.refreshViews();
     this.log("drop", client);
-    try { await this.allowReconnection(client, 60); } catch { /* onLeave faz a limpeza definitiva */ }
+    const reconnection = this.allowReconnection(client, 60);
+    this.reconnectCancellations.set(client.sessionId, () => reconnection.reject());
+    try { await reconnection; } catch { /* onLeave faz a limpeza definitiva */ }
+    finally { this.reconnectCancellations.delete(client.sessionId); }
   }
   onReconnect(client: Client) {
     const player = this.state.players.get(this.bindings.get(client.sessionId)!);
     if (!player) return;
     player.connected = true;
+    player.reconnecting = false;
     this.refreshViews();
     this.services.database.db.update(players).set({ reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client);
-    if (this.state.combatState.active && (player.role === 'MASTER' || player.currentChamberId === this.state.combatState.chamberId)) client.send('COMBAT_ROSTER', this.combat.snapshot());
+    if (this.state.combatState.active && (player.role === 'MASTER' || (isCharacterPresent(player) && player.currentChamberId === this.state.combatState.chamberId))) client.send('COMBAT_ROSTER', this.combat.snapshot());
     this.log("reconnect", client);
   }
   onLeave(client: Client) {
@@ -272,9 +321,11 @@ export class GameRoom extends Room<{ state: RoomState }> {
     const player = id && this.state.players.get(id);
     if (player) {
       player.connected = false;
+      player.reconnecting = false;
+      this.combat.removePlayer(player.id);
       this.services.database.db.update(players).set({ reconnectionToken: null, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
       // Cancelar a espera libera o nome para uma nova tentativa.
-      if (player.status === "PENDING_APPROVAL") {
+      if (player.status === "PENDING_APPROVAL" && !player.characterId) {
         this.services.database.db.delete(players).where(eq(players.id, player.id)).run();
         this.state.players.delete(player.id);
       }

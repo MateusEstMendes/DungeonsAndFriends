@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { RequestMoveSchema, MasterMoveSchema, findHexPath, getHexKey, getHexEdgeKey, getHexRing, type Hex, type PlayerSchema, type RoomState } from "@df/shared";
+import { RequestMoveSchema, MasterMoveSchema, findHexPath, getHexKey, getHexEdgeKey, hexDistance, isCharacterPresent, type Hex, type PlayerSchema, type RoomState } from "@df/shared";
 import type { Database } from "../../services/boardRepository.js";
 import { characters, placedObjects } from "../../db/schema.js";
 export class MovementHandler {
@@ -9,26 +9,29 @@ export class MovementHandler {
     return !!cell && cell !== "DEEP_WATER" && cell !== "OBSTACLE";
   }
   occupied(chamberId: string, hex: Hex, exceptId = "") {
-    return [...this.state.players.values(), ...this.state.monsters.values()].some(p => p.id !== exceptId && p.currentChamberId === chamberId && p.q === hex.q && p.r === hex.r && (!("status" in p) || p.status === "READY"));
+    return [...this.state.players.values(), ...this.state.monsters.values()].some(p => p.id !== exceptId && p.currentChamberId === chamberId && p.q === hex.q && p.r === hex.r && (!("status" in p) || isCharacterPresent(p)));
   }
   persist(player: PlayerSchema) {
     this.database.db.update(characters).set({ currentChamberId: player.currentChamberId, posQ: player.q, posR: player.r, moveCooldownEndsAt: player.moveCooldownEndsAt, remainingSteps: player.remainingSteps }).where(eq(characters.id, player.characterId)).run();
   }
   spawn(player: PlayerSchema) {
     const chamber = this.state.chambers.get(player.currentChamberId) ?? [...this.state.chambers.values()].find(c => c.mapId === this.state.activeStageId);
-    if (!chamber) throw new Error("Câmara inicial indisponível.");
+    player.awaitingPosition = true;
+    if (!chamber) return false;
     const center = player.currentChamberId === chamber.id ? { q: player.q, r: player.r } : { q: chamber.spawnQ, r: chamber.spawnR };
-    for (let radius = 0; radius <= 400; radius++) for (const h of getHexRing(center, radius)) {
+    const cells = [...chamber.cells.keys()].map(key => { const [q, r] = key.split(',').map(Number); return { q, r }; })
+      .sort((a, b) => hexDistance(center, a) - hexDistance(center, b) || a.q - b.q || a.r - b.r);
+    for (const h of cells) {
       if (!this.isWalkable(chamber.id, h) || this.occupied(chamber.id, h, player.id)) continue;
       player.currentChamberId = chamber.id; player.q = h.q; player.r = h.r;
       if (player.remainingSteps < 0) player.remainingSteps = player.speed;
-      this.persist(player); return;
+      this.persist(player); player.awaitingPosition = false; return true;
     }
-    throw new Error("Não há posição livre para este personagem.");
+    return false;
   }
   request(player: PlayerSchema, input: unknown, now = Date.now()) {
     const data = RequestMoveSchema.parse(input);
-    if (player.role !== "PLAYER" || player.status !== "READY") throw new Error("A ficha precisa estar pronta para mover.");
+    if (player.role !== "PLAYER" || !isCharacterPresent(player)) throw new Error("O personagem precisa estar presente no tabuleiro para mover.");
     if (data.revision !== player.moveRevision) throw new Error("A posição foi alterada pelo Mestre. Escolha o destino novamente.");
     if (player.moveCooldownEndsAt > now) throw new Error("Aguarde o intervalo de movimento.");
     const chamber = this.state.chambers.get(player.currentChamberId)!;
@@ -58,7 +61,7 @@ export class MovementHandler {
     this.refresh();
   }
   endTurn(player: PlayerSchema, now = Date.now()) {
-    if (player.role !== "PLAYER" || player.status !== "READY") throw new Error("Ação indisponível.");
+    if (player.role !== "PLAYER" || !isCharacterPresent(player)) throw new Error("Ação indisponível.");
     if (player.moveCooldownEndsAt > now) return;
     const cooldown = now + (this.state.explorationMode === "DUNGEON_TENSE_30S" ? 30_000 : 1000);
     this.database.db.update(characters).set({ remainingSteps: 0, moveCooldownEndsAt: cooldown }).where(eq(characters.id, player.characterId)).run();
@@ -70,8 +73,10 @@ export class MovementHandler {
     if (!entity || !this.isWalkable(data.chamberId, data)) throw new Error("Entidade ou destino inválido.");
     if (!this.state.objects.has(entity.id) && this.occupied(data.chamberId, data, entity.id)) throw new Error("Destino ocupado.");
     if ("status" in entity) {
+      if (entity.status !== "READY" || !entity.connected) throw new Error("O jogador precisa estar conectado e aprovado.");
       this.database.db.update(characters).set({ currentChamberId: data.chamberId, posQ: data.q, posR: data.r }).where(eq(characters.id, entity.characterId)).run();
       entity.moveRevision++;
+      entity.awaitingPosition = false;
     } else this.database.db.update(placedObjects).set({ chamberId: data.chamberId, q: data.q, r: data.r }).where(eq(placedObjects.id, entity.id)).run();
     Object.assign(entity, { currentChamberId: data.chamberId, q: data.q, r: data.r });
     this.refresh();
