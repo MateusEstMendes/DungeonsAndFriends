@@ -1,6 +1,6 @@
 import { isCharacterPresent } from "@df/shared";
 import { useState } from "react";
-import { TERRAIN_TYPES } from "@df/shared";
+import { MONSTER_CATALOG, TERRAIN_TYPES } from "@df/shared";
 import { boardCommand } from "../../network/colyseusClient";
 import { useBoardStore } from "../../store/useBoardStore";
 import { useGameStore } from "../../store/useGameStore";
@@ -23,7 +23,7 @@ export function BoardEditor() {
     {board.tool === "WALL" && <><label>Aresta<select value={board.wallDirection} onChange={e => set({ wallDirection: Number(e.target.value) })}>{["Leste", "Nordeste", "Noroeste", "Oeste", "Sudoeste", "Sudeste"].map((name, i) => <option key={name} value={i}>{name}</option>)}</select></label><label className="check-label"><input type="checkbox" checked={board.eraseWall} onChange={e => set({ eraseWall: e.target.checked })}/>Apagar parede</label></>}
     {board.tool === "OBJECT" && <><label>Objeto<select value={board.objectKind} onChange={e => set({ objectKind: e.target.value })}>{[["CHEST", "Baú"], ["TABLE", "Mesa"], ["CHAIR", "Cadeira"], ["DOOR", "Porta"], ["TORCH", "Tocha"]].map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>Rotação<select value={board.rotation} onChange={e => set({ rotation: Number(e.target.value) })}>{[0, 60, 120, 180, 240, 300].map(n => <option key={n} value={n}>{n}°</option>)}</select></label></>}
     {(board.tool === "OBJECT" || board.tool === "ENTITY") && <label className="check-label"><input type="checkbox" checked={board.hidden} onChange={e => set({ hidden: e.target.checked })}/>Oculto para jogadores</label>}
-    {board.tool === 'ENTITY' && <label>Monstro do catálogo<select value={board.monsterName} onChange={e => set({ monsterName: e.target.value })}>{['Goblin','Esqueleto Guerreiro','Cultista Arcano'].map(name => <option key={name}>{name}</option>)}</select></label>}
+    {board.tool === 'ENTITY' && <><label>Monstro do catálogo<select value={board.monsterName} onChange={e => set({ monsterName: e.target.value })}>{MONSTER_CATALOG.map(monster => <option key={monster.id} value={monster.name}>{monster.name}</option>)}</select></label><img src={MONSTER_CATALOG.find(monster => monster.name === board.monsterName)?.imageUrl} alt={`Prévia de ${board.monsterName}`} width={120} height={120} style={{ objectFit: 'contain', display: 'block', margin: '8px auto' }}/></>}
     <p className="board-hint">{board.tool === "SELECT" ? "Arraste um token para reposicioná-lo. Toque para selecionar; toque novamente para alternar sobrepostos." : board.tool === "OBJECT" ? "Toque para colocar. Cada hexágono aceita um objeto de cada tipo." : "Toque no hexágono para aplicar. Terreno expande as bordas."}</p>
     {selected && <section className="entity-inspector"><strong>{selected.name} · ({selected.q}, {selected.r})</strong><label>Entidades neste hexágono<select value={board.selectedEntityId} onChange={e => set({ selectedEntityId: e.target.value })}>{overlapped.map(e => <option key={e.id} value={e.id}>{e.name}{e.isHiddenByMaster ? " · Oculto" : ""}</option>)}</select></label>
       {"kind" in selected && <button onClick={() => boardCommand("MASTER_ROTATE_OBJECT", { entityId: selected.id, rotation: ((selected.rotation ?? 0) + 60) % 360 })}>Girar 60°</button>}

@@ -19,7 +19,7 @@ it('migrates and seeds combat tables on a fresh database', () => {
   const database = openDatabase(':memory:');
   try {
     const rows = database.sqlite.prepare('SELECT name, flat_dr FROM monsters_catalog ORDER BY id').all();
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(10);
     expect(rows).toContainEqual({ name: 'Esqueleto Guerreiro', flat_dr: 5 });
     for (const table of ['combat_encounters', 'combat_participants', 'active_buffs'])
       expect(database.sqlite.prepare(`SELECT count(*) AS count FROM ${table}`).get()).toEqual({ count: 0 });

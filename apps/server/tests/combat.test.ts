@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { PlayerSchema, RoomState } from '@df/shared';
+import { MONSTER_CATALOG, MonsterSchema, PlayerSchema, RoomState } from '@df/shared';
 import { characterPayload } from '../../../packages/shared/tests/characterFixture.js';
 import { openDatabase } from '../src/db/index.js';
 import { characters, players } from '../src/db/schema.js';
@@ -37,6 +37,18 @@ function setup(filename = ':memory:') {
   const combat = new CombatHandler(state, database, room.id, send, () => {}, faces => faces === 100 ? 100 : 10, () => now);
   return { database, room, state, hero, master, combat, send, wait: () => { now += 1300; } };
 }
+it.each(MONSTER_CATALOG)('starts an encounter with $name and resolves its catalog attack', definition => {
+  const { combat, state, hero, master, wait } = setup();
+  state.monsters.clear();
+  const monster = Object.assign(new MonsterSchema(), { id: 'catalog-monster', name: definition.name, currentChamberId: 'training-1', q: 3, r: 0 });
+  state.monsters.set(monster.id, monster);
+  combat.start({ chamberId: 'training-1' });
+  expect(combat.snapshot().participants.find(p => p.id === monster.id)).toMatchObject({ hp: definition.hp, mp: definition.mp, attackType: definition.attackType, baseDamage: definition.baseDamage });
+  combat.skip(); wait();
+  expect(state.combatState.activeParticipantId).toBe(monster.id);
+  combat.action(master, { type: 'ATTACK', subType: definition.attackType, targetId: hero.id, turnToken: state.combatState.turnToken }, true);
+  expect(hero.hp).toBeLessThan(100);
+});
 it('alerts the master only, orders initiative, rejects duplicates and forbids extra fleeing', () => {
   const { combat, state, hero, send, wait } = setup();
   combat.proximity(hero);
@@ -199,8 +211,8 @@ it('upgrades a real v0.3 database without changing characters, maps or credentia
   expect(upgraded.db.select().from(players).where(eq(players.id, player.id)).get()).toMatchObject({ sessionToken: 'preserve-this-token', characterId: character.id });
   expect(upgraded.db.select().from(schema.rooms).get()?.code).toBe(room.code);
   expect(upgraded.db.select().from(schema.chambers).all()).toHaveLength(3);
-  expect(upgraded.db.select().from(schema.monstersCatalog).all()).toHaveLength(3);
+  expect(upgraded.db.select().from(schema.monstersCatalog).all()).toHaveLength(10);
   upgraded.close(); const second = openDatabase(filename); databases.push(second);
   expect(second.sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 4 });
-  expect(second.db.select().from(schema.monstersCatalog).all()).toHaveLength(3);
+  expect(second.db.select().from(schema.monstersCatalog).all()).toHaveLength(10);
 });

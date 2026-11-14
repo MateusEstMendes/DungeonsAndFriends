@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { databasePath, migrationsFolder } from "./paths.js";
 import * as schema from "./schema.js";
 import { seedMaps } from "./seedMaps.js";
+import { seedMonsters } from "./seedMonsters.js";
 
 const foundationVersion = "0.1.0";
 
@@ -30,6 +31,7 @@ export function openDatabase(filename = databasePath()) {
     }
     // Drizzle mantém __drizzle_migrations; o ledger do jogo registra a versão da fundação.
     migrate(db, { migrationsFolder });
+    seedMonsters(db);
     seedMaps(db);
     db.insert(schema.dungeonsMigrations).values({
       version: foundationVersion, appliedAt: Date.now(), checksum,

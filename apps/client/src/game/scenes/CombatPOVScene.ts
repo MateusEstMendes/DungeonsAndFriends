@@ -1,4 +1,5 @@
-import { Container, Graphics, Sprite, Text, type Application, type Texture } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, Text, type Application, type Texture } from 'pixi.js';
+import { getMonsterDefinition } from '@df/shared';
 import { gsap } from 'gsap';
 import { useCombatStore } from '../../store/useCombatStore';
 import { useGameStore } from '../../store/useGameStore';
@@ -8,7 +9,7 @@ import { combatEffects } from '../vfx/combatEffects';
 import { floatingText } from '../vfx/floatingText';
 import { diceAnimation } from '../vfx/diceAnimation';
 
-interface MonsterPlate { root: Container; sprite: Sprite; label: Text; hp: Graphics; reticle: Graphics; texture: Texture; idle?: gsap.core.Tween }
+interface MonsterPlate { root: Container; sprite: Sprite; label: Text; hp: Graphics; reticle: Graphics; texture: Texture; ownsTexture: boolean }
 export class CombatPOVScene {
   readonly root = new Container();
   private background = new Graphics();
@@ -23,6 +24,7 @@ export class CombatPOVScene {
   private unsubscribe: () => void;
   private resize: ResizeObserver;
   private biomeKey = '';
+  private disposed = false;
   constructor(private app: Application, host: HTMLElement) {
     app.stage.addChild(this.root); this.root.addChild(this.background, this.actors, this.effects, this.dice);
     app.canvas.setAttribute('aria-label', 'Arena de combate em perspectiva frontal. Use os controles de batalha para escolher sua ação e alvo.');
@@ -43,7 +45,7 @@ export class CombatPOVScene {
     if (key !== this.biomeKey) { drawBiome(this.background, combat.biome, w, h); this.biomeKey = key; }
     const monsters = participants.filter(p => p.kind === 'MONSTER');
     for (const [id, plate] of this.plates) if (!monsters.some(p => p.id === id)) {
-      plate.idle?.kill(); plate.root.destroy({ children: true }); plate.texture.destroy(true); this.plates.delete(id);
+      plate.root.destroy({ children: true }); if (plate.ownsTexture) plate.texture.destroy(true); this.plates.delete(id);
     }
     monsters.forEach((monster, index) => {
       let plate = this.plates.get(monster.id);
@@ -56,13 +58,14 @@ export class CombatPOVScene {
         root.eventMode = 'static'; root.cursor = 'pointer'; root.on('pointertap', () => {
           useCombatStore.setState({ targetId: monster.id, ...(useGameStore.getState().role === 'MASTER' ? { manualMonsterId: monster.id } : {}) });
         });
-        plate = { root, sprite, hp, reticle, label, texture }; this.plates.set(monster.id, plate);
-        const current = plate;
-        if (!this.motion.reduced) this.motion.run(() => { current.idle = gsap.to(sprite.scale, { y: 1.03, duration: 1.7 + index * .2, ease: 'sine.inOut', repeat: -1, yoyo: true }); });
+        plate = { root, sprite, hp, reticle, label, texture, ownsTexture: true }; this.plates.set(monster.id, plate);
+        const definition = getMonsterDefinition(monster.name);
+        if (definition) void this.loadMonsterImage(monster.id, plate, definition.imageUrl);
       }
-      const spread = Math.min(w * .75, monsters.length * 240);
-      plate.root.position.set(w / 2 + (index - (monsters.length - 1) / 2) * spread / Math.max(1, monsters.length), h * (w < 700 ? .68 : .64));
-      plate.root.scale.set(Math.min(w < 700 ? 1.2 : 1.5, h / 470, w / (Math.max(1, monsters.length) * 180)));
+      const maxScale = Math.min(w < 700 ? 1.2 : 1.5, h / 470);
+      const slotWidth = Math.min(280 * maxScale, w * .86 / Math.max(1, monsters.length));
+      plate.root.position.set(w / 2 + (index - (monsters.length - 1) / 2) * slotWidth, h * (w < 700 ? .68 : .64));
+      plate.root.scale.set(Math.min(maxScale, slotWidth / 250));
       plate.root.alpha = monster.hp > 0 ? 1 : .25;
       plate.label.text = `${monster.name}\n${monster.hp}/${monster.maxHp} HP${monster.stance ? '\n' + (monster.stance === 'ACTIVE_DODGE' ? 'Esquiva preparada' : 'Bloqueio') : ''}`;
       plate.label.position.set(0, -255);
@@ -90,8 +93,21 @@ export class CombatPOVScene {
       });
     }
   }
+  private async loadMonsterImage(id: string, plate: MonsterPlate, url: string) {
+    try {
+      const texture = await Assets.load<Texture>(url);
+      if (this.disposed || this.plates.get(id) !== plate) return;
+      const fallback = plate.texture;
+      plate.sprite.texture = texture;
+      // Preserve the complete silhouette and aspect ratio, including wings and weapons.
+      plate.sprite.scale.set(Math.min(220 / texture.width, 220 / texture.height));
+      plate.texture = texture; plate.ownsTexture = false;
+      fallback.destroy(true);
+    } catch { /* The procedural plate remains usable if the image is unavailable. */ }
+  }
   destroy() {
+    this.disposed = true;
     this.unsubscribe(); this.resize.disconnect(); this.lifecycle.abort(); this.effectsMotion.destroy(); this.motion.destroy();
-    this.root.destroy({ children: true }); for (const p of this.plates.values()) p.texture.destroy(true); this.plates.clear();
+    this.root.destroy({ children: true }); for (const p of this.plates.values()) if (p.ownsTexture) p.texture.destroy(true); this.plates.clear();
   }
 }

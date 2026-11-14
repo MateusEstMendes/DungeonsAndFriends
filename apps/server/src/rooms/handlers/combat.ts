@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { calculateTotalActions, getModifier, hexDistance, isCharacterPresent, isMagicAttack, resolveAttack, resolveFlee, validateAction,
+import { calculateTotalActions, getModifier, getMonsterDefinition, hexDistance, isCharacterPresent, isMagicAttack, resolveAttack, resolveFlee, validateAction,
   PHYSICAL_ATTACKS, MAGICAL_ATTACKS, type AttackType, type CombatAction, type CombatantStats, type PlayerSchema, type RoomState } from '@df/shared';
 import { activeBuffs, characters, combatEncounters, combatParticipants, monstersCatalog } from '../../db/schema.js';
 import type { Database } from '../../services/boardRepository.js';
@@ -50,7 +50,8 @@ export class CombatHandler {
     const catalog = this.database.db.select().from(monstersCatalog).all();
     for (const monster of this.state.monsters.values()) {
       if (monster.currentChamberId !== chamberId || monster.isHiddenByMaster) continue;
-      const row = catalog.find(c => c.name === monster.name || c.id === monster.name || (monster.name === 'Sentinela' && c.id === 'SKELETON_WARRIOR') || (monster.name === 'Monstro' && c.id === 'GOBLIN'));
+      const definition = getMonsterDefinition(monster.name);
+      const row = catalog.find(c => c.name === monster.name || c.id === monster.name || c.id === definition?.id);
       if (!row) throw new Error(`Monstro sem ficha no catálogo: ${monster.name}`);
       roster.set(monster.id, { id: monster.id, name: row.name, kind: 'MONSTER', hp: row.hp, maxHp: row.hp, mp: row.mp, maxMp: row.mp,
         str: row.str, int: row.int, dex: row.dex, dexMod: getModifier(row.dex), speed: row.speed, flatDR: row.flatDr,

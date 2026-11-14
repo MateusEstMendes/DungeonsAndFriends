@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import { Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { gsap } from "gsap";
 import { findHexPath, getHexEdgeKey, getHexKey, hexToPixel } from "@df/shared";
 import type { BoardChamber, BoardEntity } from "../../store/useBoardStore";
@@ -44,11 +44,18 @@ export class EntityLayer extends Container {
   }
   private async loadToken(token: Token, url: string) {
     try {
-      const image = new Image(); image.src = url; await image.decode();
+      const shared = url.startsWith('/enemies/');
+      let texture: Texture;
+      if (shared) texture = await Assets.load<Texture>(url);
+      else {
+        const image = new Image(); image.src = url; await image.decode();
+        if (this.disposed || token.group.destroyed || token.url !== url) return;
+        texture = Texture.from(image);
+      }
       if (this.disposed || token.group.destroyed || token.url !== url) return;
-      const texture = Texture.from(image), sprite = new Sprite(texture); sprite.anchor.set(0.5); sprite.width = sprite.height = 52;
+      const sprite = new Sprite(texture); sprite.anchor.set(0.5); sprite.width = sprite.height = 52;
       const mask = new Graphics().circle(0, 0, 26).fill(0xffffff); sprite.mask = mask;
-      token.group.addChild(sprite, mask); token.texture = texture;
+      token.group.addChild(sprite, mask); if (!shared) token.texture = texture;
     } catch { /* A readable fallback token remains when an image cannot load. */ }
   }
   dispose() {

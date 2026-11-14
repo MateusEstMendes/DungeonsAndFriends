@@ -78,6 +78,8 @@ Para alterar a estrutura, edite `schema.ts`, rode `pnpm db:generate`, revise o S
 
 ## Tabuleiro e editor
 
+O seletor **Entidades → Monstro do catálogo** oferece Goblin, Esqueleto Guerreiro, Cultista Arcano, Slime, Lobo Sombrio, Aranha Gigante, Zumbi, Orc Saqueador, Golem de Pedra e Dragão Jovem, com prévia da imagem. As artes fornecidas em `DesignEX/Enemies` são usadas nos tokens e na arena, com arquivos de execução em `apps/client/public/enemies/`. Os tipos ausentes são cadastrados na inicialização sem sobrescrever ajustes existentes; os sete tipos novos têm atributos iniciais para balanceamento.
+
 Cada hexágono aceita um objeto de cada tipo (baú, mesa, cadeira, porta e tocha). Tipos diferentes podem se sobrepor. O servidor bloqueia duplicatas na colocação, no movimento e no Undo/Redo. Objetos acumulados antes dessa regra são preservados e podem ser separados ou removidos pelo painel do Mestre.
 
 Toque/clique em um hexágono para mover. Arraste o chão para pan, use a roda ou dois dedos para zoom e **Centralizar** para reenquadrar. O modo tenso usa `speed` como orçamento; gastar os passos ou encerrá-los inicia 30 segundos de cooldown. O modo livre aplica intervalo de um segundo. Água rasa custa dois passos; paredes, obstáculos, água profunda e destinos ocupados bloqueiam movimento. Portais transferem para a próxima câmara e descartam a memória de névoa da visita anterior.

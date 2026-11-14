@@ -2,6 +2,10 @@
 
 Atualizado em 2026-11-14.
 
+## Próxima atualização visual — imagens dos inimigos
+
+O estado mais recente dessa frente está em [handoff-imagens.md](handoff-imagens.md). As dez imagens fornecidas em `DesignEX/Enemies` foram associadas ao catálogo, à prévia do editor, aos tokens e à arena. O seed adiciona os sete tipos novos sem sobrescrever atributos existentes. A ampliação dos ataques e impactos continua planejada separadamente no PixiJS/GSAP. O [prompt de produção](prompt-design-inimigos.md) gera um inimigo por resposta. A clareza de atacante, alvo e dano está especificada em [controle-mestre-monstros-ia.md](controle-mestre-monstros-ia.md), seção 4.4.
+
 ## Estado atual — Fase 4 concluída, v0.4.0
 
 As Fases 1 a 4 estão implementadas. A próxima etapa planejada é [Fase5.md](Fase5.md): equipamentos, consumíveis, grimório, economia, lojas/baús, chat/log e IA tática. Ela ainda não foi iniciada nesta sessão. Os sprites de armas e armaduras de referência estão em `DesignEX/`, conforme o escopo da Fase 5.

@@ -102,5 +102,7 @@ test('golpe fraco aplica dano mínimo e apresenta DR na arena', async ({ browser
   await player.screenshot({ path: '.local/phase4-minimum-damage.png' }); expect(errors).toEqual([]);
   await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).click();
   await expect(player.getByRole('region', { name: 'Mesa de aventura', exact: true })).toBeVisible();
+  await player.getByRole('button', { name: 'Sair', exact: true }).click();
+  await gm.getByRole('button', { name: 'Sair', exact: true }).click();
   await context.close(); await gmContext.close();
 });

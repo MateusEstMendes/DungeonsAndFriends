@@ -1,4 +1,4 @@
-import { ChamberSchema, MonsterSchema, PlacedObjectSchema, PortalSchema, getHexKey, type RoomState, type Terrain } from "@df/shared";
+import { ChamberSchema, MonsterSchema, PlacedObjectSchema, PortalSchema, getHexKey, getMonsterDefinition, type RoomState, type Terrain } from "@df/shared";
 import type { openDatabase } from "../db/index.js";
 import { chambers, placedObjects, terrainCells, walls } from "../db/schema.js";
 export type Database = ReturnType<typeof openDatabase>;
@@ -21,7 +21,10 @@ export function loadBoard(state: RoomState, data: BoardSnapshot) {
   for (const row of data.objects) {
     const entity = row.kind === "MONSTER" ? new MonsterSchema() : new PlacedObjectSchema();
     Object.assign(entity, { id: row.id, currentChamberId: row.chamberId, name: row.name, q: row.q, r: row.r, rotation: row.rotation, kind: row.kind, isHiddenByMaster: row.hidden });
-    if (entity instanceof MonsterSchema) state.monsters.set(entity.id, entity);
+    if (entity instanceof MonsterSchema) {
+      entity.tokenUrl = getMonsterDefinition(row.name)?.imageUrl ?? '';
+      state.monsters.set(entity.id, entity);
+    }
     else state.objects.set(entity.id, entity);
   }
 }
