@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { resolve, sep } from 'node:path';
 
 test('proximidade, arena sincronizada, ações extras e soberania do Mestre em mobile', async ({ browser }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const gmContext = await browser.newContext(), gm = await gmContext.newPage();
   const errors: string[] = []; gm.on('pageerror', e => errors.push(e.message));
   await gm.goto('/'); await gm.getByText('Acesso do Mestre', { exact: true }).click();
@@ -39,13 +41,20 @@ test('proximidade, arena sincronizada, ações extras e soberania do Mestre em m
   await expect(gm.locator('.combat-dice-status')).toHaveText(result.replace(/\n/g, ''));
   await player.screenshot({ path: '.local/phase4-player-mobile.png' });
   expect(await player.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await player.reload(); await player.getByRole('button', { name: 'Continuar sessão' }).click();
+  await expect(player.getByRole('region', { name: 'Arena de combate', exact: true })).toBeVisible();
+  await expect(player.locator('.active-portrait')).toContainText('1 ação(ões)');
+  await expect(player.getByRole('button', { name: 'Fugir', exact: true })).toBeDisabled();
   await player.getByRole('button', { name: 'Defender', exact: true }).click();
   await player.getByRole('button', { name: 'Esquiva Ativa', exact: true }).click();
   await gm.getByText('Controlar monstro', { exact: true }).click();
-  await gm.getByRole('button', { name: 'Esqueleto Guerreiro', exact: true }).click();
+  await gm.getByRole('button', { name: 'Goblin', exact: true }).click();
   await gm.getByRole('button', { name: 'Atacar', exact: true }).click();
-  await gm.getByRole('button', { name: 'Corte', exact: true }).click();
+  await gm.getByRole('button', { name: 'Perfuração', exact: true }).click();
   await expect(player.locator('.combat-dice-status span')).toContainText('d20:');
+  await expect(player.locator('.combat-dice-status')).not.toContainText('DR absorveu');
+  writeFileSync('.local/phase4-active-dodge.json', JSON.stringify({ display: await player.locator('.combat-dice-status').innerText() }));
+  await gm.getByRole('button', { name: 'Pular turno', exact: true }).click();
   await gm.getByRole('button', { name: 'Pausar', exact: true }).click();
   await expect(player.getByRole('button', { name: 'Atacar', exact: true })).toBeDisabled();
   await gm.getByRole('button', { name: 'Retomar', exact: true }).click();
@@ -60,5 +69,38 @@ test('proximidade, arena sincronizada, ações extras e soberania do Mestre em m
   expect(errors).toEqual([]);
   await player.getByRole('button', { name: 'Sair', exact: true }).click();
   await gm.getByRole('button', { name: 'Sair', exact: true }).click();
+  await context.close(); await gmContext.close();
+});
+
+test('golpe fraco aplica dano mínimo e apresenta DR na arena', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const fixture = JSON.parse(readFileSync('.local/e2e-player.json', 'utf8'));
+  // Only the dedicated fixture database is changed; production dice remain cryptographically random.
+  const filename = resolve(fixture.databasePath);
+  expect(filename.startsWith(resolve('.local') + sep)).toBe(true);
+  const SQLite = createRequire(resolve('apps/server/package.json'))('better-sqlite3');
+  const database = new SQLite(filename);
+  database.prepare('UPDATE characters SET final_str = 6, final_int = 10 WHERE id = ?').run(fixture.characterId); database.close();
+  const gmContext = await browser.newContext(), gm = await gmContext.newPage();
+  await gm.goto('/'); await gm.getByText('Acesso do Mestre', { exact: true }).click();
+  await gm.getByLabel('Senha do Mestre').fill('board-e2e-password'); await gm.getByRole('button', { name: 'Entrar como Mestre' }).click();
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+  await context.addInitScript(data => { if (location.protocol !== 'http:') return; localStorage.setItem('df_session_token', data.token); localStorage.setItem('df_room_code', data.roomCode); localStorage.setItem('df_player_name', data.name); }, fixture);
+  const player = await context.newPage(), errors: string[] = []; player.on('pageerror', e => errors.push(e.message));
+  await player.goto('/'); await player.getByRole('button', { name: 'Continuar sessão' }).click();
+  await gm.getByRole('button', { name: 'Iniciar Combate', exact: true }).click();
+  await expect(player.getByRole('button', { name: 'Atacar', exact: true })).toBeEnabled();
+  await player.getByRole('button', { name: 'Atacar', exact: true }).click(); await player.getByRole('button', { name: 'Corte', exact: true }).click();
+  await expect(player.locator('.combat-dice-status strong')).toContainText('DR absorveu');
+  const rolls = await player.locator('.combat-dice-status span').innerText();
+  const natural = Number(rolls.match(/d20: (\d+)/)?.[1]); expect(natural).toBeGreaterThan(0);
+  const damage = natural === 20 ? 3 : 1, absorbed = natural === 20 ? 5 : 3;
+  await expect(player.locator('.combat-dice-status strong')).toContainText(`−${damage} HP · DR absorveu ${absorbed}`);
+  await expect(player.locator('.combat-enemies')).toContainText(`${45 - damage}/45`);
+  writeFileSync('.local/phase4-minimum-damage.json', JSON.stringify({ natural, rawDamage: natural === 20 ? 8 : 4, damage, absorbed, targetHp: 45 - damage }));
+  await player.bringToFront();
+  await player.screenshot({ path: '.local/phase4-minimum-damage.png' }); expect(errors).toEqual([]);
+  await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).click();
+  await expect(player.getByRole('region', { name: 'Mesa de aventura', exact: true })).toBeVisible();
   await context.close(); await gmContext.close();
 });

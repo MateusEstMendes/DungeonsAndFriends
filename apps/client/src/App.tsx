@@ -15,7 +15,7 @@ export function App() {
     {screen !== "LOBBY" && <ConnectionBar/>}
     {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => useUIStore.setState({ notice: "" })}>×</button></div>}
     {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : own?.status === "NEEDS_CHARACTER_CREATION" && !own.characterId ? <Suspense fallback={<p role="status">Preparando criação de personagem…</p>}><CharacterCreatorScreen key={own.id}/></Suspense> : own?.role === "MASTER" || own?.status === "READY" ? <Suspense fallback={<p role="status">Preparando tabuleiro…</p>}><BoardScreen/></Suspense> : <RoomScreen/>}
-    <footer>Dungeons & Friends · v0.3.0</footer>
+    <footer>Dungeons & Friends · v0.4.0</footer>
   </main>;
 }
 function ConnectionBar() {

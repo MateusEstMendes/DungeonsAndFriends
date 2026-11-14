@@ -18,6 +18,7 @@ export class CombatHandler {
   private participants = new Map<string, Participant>();
   private cutoffs: D20Cutoffs = { ...DEFAULT_CUTOFFS };
   private unlockAt = 0;
+  private encounterStatus: 'ACTIVE' | 'ENDED' | 'FLED' = 'ACTIVE';
   private alerts = new Map<string, string>();
   constructor(private state: RoomState, private database: Database, private roomId: string,
     private send: Send, private refresh: () => void, private dice = roll, private now = Date.now) {}
@@ -55,14 +56,18 @@ export class CombatHandler {
         passiveDodge: row.passiveDodge, archetypeId: '', baseDamage: row.baseDamage, attackType: row.attackType as AttackType, cooldowns: {}, potions: 0 });
     }
     if (![...roster.values()].some(p => p.kind === 'PLAYER') || ![...roster.values()].some(p => p.kind === 'MONSTER')) throw new Error('São necessários heróis e monstros vivos na câmara.');
-    this.participants = roster;
-    const c = this.state.combatState;
-    c.encounterId = randomUUID(); c.chamberId = chamberId; c.active = true; c.round = 1; c.isPaused = false; c.fleeMode = 'NORMAL';
-    const biome = this.state.chambers.get(chamberId)!.biome;
-    c.biome = ['CAVE','FOREST','TAVERN','DUNGEON'].includes(biome) ? biome as typeof c.biome : 'DUNGEON';
-    c.turnOrder.splice(0, c.turnOrder.length, ...[...roster.values()].sort((a,b) => b.speed - a.speed || b.dex - a.dex || a.id.localeCompare(b.id)).map(p => p.id));
-    c.activeParticipantId = c.turnOrder[0]; this.beginTurn(); this.state.sessionStatus = 'IN_COMBAT';
-    this.persist(true); this.publish();
+    const before = this.checkpoint();
+    try {
+      this.participants = roster; this.encounterStatus = 'ACTIVE'; this.unlockAt = 0;
+      const c = this.state.combatState;
+      c.encounterId = randomUUID(); c.chamberId = chamberId; c.active = true; c.round = 1; c.isPaused = false; c.fleeMode = 'NORMAL';
+      const biome = this.state.chambers.get(chamberId)!.biome;
+      c.biome = ['CAVE','FOREST','TAVERN','DUNGEON'].includes(biome) ? biome as typeof c.biome : 'DUNGEON';
+      c.turnOrder.splice(0, c.turnOrder.length, ...[...roster.values()].sort((a,b) => b.speed - a.speed || b.dex - a.dex || a.id.localeCompare(b.id)).map(p => p.id));
+      c.activeParticipantId = c.turnOrder[0]; this.beginTurn(); this.state.sessionStatus = 'IN_COMBAT';
+      this.persist(true);
+    } catch (error) { this.rollback(before); throw error; }
+    this.publish();
   }
 
   action(player: PlayerSchema, input: unknown, manual = false) {
@@ -78,10 +83,11 @@ export class CombatHandler {
     if (action.type === 'ATTACK' && target.kind === actor.kind) throw new Error('Selecione um inimigo.');
     if ((action.type === 'ITEM' || action.type === 'DEFEND') && target.kind !== actor.kind) throw new Error('Selecione um aliado.');
     if (action.type === 'FLEE' && c.fleeMode === 'BLOCKED') throw new Error('A fuga está bloqueada pelo Mestre.');
+    const before = this.checkpoint();
+    const event: Record<string, unknown> = { id: randomUUID(), encounterId: c.encounterId, actorId: actor.id, targetId: target.id,
+      type: action.type, round: c.round, turnToken: c.turnToken, startedAt: this.now(), duration: 1200, rolls: [] };
     c.isProcessingAction = true;
     try {
-      const event: Record<string, unknown> = { id: randomUUID(), encounterId: c.encounterId, actorId: actor.id, targetId: target.id,
-        type: action.type, round: c.round, turnToken: c.turnToken, startedAt: this.now(), duration: 1200, rolls: [] };
       const rolls = event.rolls as { faces: number; value: number }[];
       const dice = (faces: number) => { const value = this.dice(faces); rolls.push({ faces, value }); return value; };
       if (action.type === 'ATTACK') {
@@ -122,31 +128,33 @@ export class CombatHandler {
         const fled = resolveFlee(actor.speed, [...this.participants.values()].filter(p => p.kind !== actor.kind && p.hp > 0).map(p => p.speed), value,
           { fleeBlocked: c.fleeMode === 'BLOCKED', guaranteedFlee: c.fleeMode === 'GUARANTEED_100' });
         Object.assign(event, { outcome: fled ? 'FLED' : 'FLEE_FAILED', roll: value });
-        if (fled) this.finish('FLED', false);
+        if (fled) this.finish('FLED');
       }
       if (c.active) {
         c.remainingActions--; c.actionIndex++;
-        if (!this.alive('PLAYER').length || !this.alive('MONSTER').length) this.finish('ENDED', false);
+        if (!this.alive('PLAYER').length || !this.alive('MONSTER').length) this.finish('ENDED');
         else if (c.remainingActions === 0 || actor.hp === 0) this.advance();
         else c.turnToken = randomUUID();
       }
       this.unlockAt = this.now() + 1200;
-      this.persist(); this.syncVitals(); this.publish();
-      this.send('COMBAT_EVENT', event, c.chamberId);
-      console.info(JSON.stringify({ audit: 'combat', ...event }));
-    } finally { c.isProcessingAction = false; }
+      this.persist();
+    } catch (error) { this.rollback(before); throw error; }
+    finally { c.isProcessingAction = false; }
+    this.syncVitals(); this.publish();
+    this.send('COMBAT_EVENT', event, c.chamberId);
+    console.info(JSON.stringify({ audit: 'combat', ...event }));
   }
 
-  pause(input: unknown) { const value = this.object(input).paused; if (typeof value !== 'boolean') throw new Error('Pausa inválida.'); this.requireActive(); this.state.combatState.isPaused = value; this.save(); }
-  fleeMode(input: unknown) { const value = this.object(input).mode; if (!['NORMAL','BLOCKED','GUARANTEED_100'].includes(value as string)) throw new Error('Modo inválido.'); this.requireActive(); this.state.combatState.fleeMode = value as 'NORMAL' | 'BLOCKED' | 'GUARANTEED_100'; this.save(); }
+  pause(input: unknown) { const value = this.object(input).paused; if (typeof value !== 'boolean') throw new Error('Pausa inválida.'); this.requireActive(); this.change(() => { this.state.combatState.isPaused = value; }); }
+  fleeMode(input: unknown) { const value = this.object(input).mode; if (!['NORMAL','BLOCKED','GUARANTEED_100'].includes(value as string)) throw new Error('Modo inválido.'); this.requireActive(); this.change(() => { this.state.combatState.fleeMode = value as 'NORMAL' | 'BLOCKED' | 'GUARANTEED_100'; }); }
   reorder(input: unknown) {
     this.requireActive(); const order = this.object(input).turnOrder, c = this.state.combatState;
     if (!Array.isArray(order) || order.length !== c.turnOrder.length || new Set(order).size !== order.length || !order.every(id => typeof id === 'string' && c.turnOrder.includes(id))) throw new Error('Fila inválida.');
-    c.turnOrder.splice(0, c.turnOrder.length, ...order); this.save();
+    this.change(() => { c.turnOrder.splice(0, c.turnOrder.length, ...order); });
   }
-  skip() { this.requireActive(); this.advance(); this.unlockAt = this.now() + 1200; this.save(); }
-  end() { this.requireActive(); this.finish('ENDED'); }
-  setCutoffs(input: unknown) { this.requireActive(); const data = this.object(input); const cutoffs = { criticalFailure: data.criticalFailure as number, success: data.success as number, criticalSuccess: data.criticalSuccess as number }; validateCutoffs(cutoffs); this.cutoffs = cutoffs; this.save(); }
+  skip() { this.requireActive(); this.change(() => { this.advance(); this.unlockAt = this.now() + 1200; }); }
+  end() { this.requireActive(); this.change(() => this.finish('ENDED')); }
+  setCutoffs(input: unknown) { this.requireActive(); const data = this.object(input); const cutoffs = { criticalFailure: data.criticalFailure as number, success: data.success as number, criticalSuccess: data.criticalSuccess as number }; validateCutoffs(cutoffs); this.change(() => { this.cutoffs = cutoffs; }); }
   tick() {
     const c = this.state.combatState;
     if (c.isProcessingAction && this.now() >= this.unlockAt) c.isProcessingAction = false;
@@ -166,12 +174,26 @@ export class CombatHandler {
       if (this.participants.get(c.turnOrder[index])!.hp > 0) { c.activeParticipantId = c.turnOrder[index]; this.beginTurn(); return; }
     }
   }
-  private finish(status: 'ENDED' | 'FLED', save = true) {
+  private finish(status: 'ENDED' | 'FLED') {
     const c = this.state.combatState; c.active = false; c.remainingActions = 0; this.state.sessionStatus = 'ACTIVE';
-    this.database.db.update(combatEncounters).set({ status, updatedAt: this.now() }).where(eq(combatEncounters.id, c.encounterId)).run();
-    if (save) this.save();
+    this.encounterStatus = status;
   }
-  private save() { this.persist(); this.syncVitals(); this.publish(); }
+  private checkpoint() {
+    return { combat: this.state.combatState.toJSON(), participants: structuredClone([...this.participants.entries()]),
+      status: this.encounterStatus, sessionStatus: this.state.sessionStatus, cutoffs: { ...this.cutoffs }, unlockAt: this.unlockAt };
+  }
+  private rollback(before: ReturnType<CombatHandler['checkpoint']>) {
+    const { turnOrder, ...fields } = before.combat;
+    Object.assign(this.state.combatState, fields);
+    this.state.combatState.turnOrder.splice(0, this.state.combatState.turnOrder.length, ...turnOrder);
+    this.participants = new Map(before.participants); this.encounterStatus = before.status;
+    this.state.sessionStatus = before.sessionStatus; this.cutoffs = before.cutoffs; this.unlockAt = before.unlockAt;
+  }
+  private change(work: () => void) {
+    const before = this.checkpoint();
+    try { work(); this.persist(); } catch (error) { this.rollback(before); throw error; }
+    this.syncVitals(); this.publish();
+  }
   private syncVitals() { for (const p of this.participants.values()) { const entity = this.state.players.get(p.id); if (entity) { entity.hp = p.hp; entity.mp = p.mp; } } }
   private publish() {
     this.send('COMBAT_ROSTER', { encounterId: this.state.combatState.encounterId, participants: [...this.participants.values()], cutoffs: this.cutoffs }, this.state.combatState.chamberId);
@@ -180,7 +202,7 @@ export class CombatHandler {
   snapshot() { return { encounterId: this.state.combatState.encounterId, participants: [...this.participants.values()], cutoffs: this.cutoffs }; }
   private persist(create = false) {
     const c = this.state.combatState;
-    const values = { roomId: this.roomId, chamberId: c.chamberId, biome: c.biome, round: c.round, turnOrderJson: JSON.stringify([...c.turnOrder]), activeParticipantId: c.activeParticipantId,
+    const values = { status: this.encounterStatus, roomId: this.roomId, chamberId: c.chamberId, biome: c.biome, round: c.round, turnOrderJson: JSON.stringify([...c.turnOrder]), activeParticipantId: c.activeParticipantId,
       remainingActions: c.remainingActions, actionIndex: c.actionIndex, fleeMode: c.fleeMode, isPaused: c.isPaused, turnToken: c.turnToken, cutoffsJson: JSON.stringify(this.cutoffs), updatedAt: this.now() };
     this.database.db.transaction(db => {
       if (create) db.insert(combatEncounters).values({ id: c.encounterId, ...values }).run();
@@ -200,10 +222,17 @@ export class CombatHandler {
     if (!row) return;
     this.participants.clear();
     for (const p of this.database.db.select().from(combatParticipants).where(eq(combatParticipants.encounterId, row.id)).all()) this.participants.set(p.id, { ...JSON.parse(p.statsJson), hp: p.hp, mp: p.mp });
+    const order: string[] = JSON.parse(row.turnOrderJson), cutoffs: D20Cutoffs = JSON.parse(row.cutoffsJson);
+    validateCutoffs(cutoffs);
+    const actor = this.participants.get(row.activeParticipantId);
+    if (!Array.isArray(order) || !order.length || new Set(order).size !== order.length || !order.every(id => this.participants.has(id))
+      || !actor || actor.hp <= 0 || !order.includes(actor.id) || row.round < 1 || row.remainingActions < 1 || row.actionIndex < 0
+      || row.remainingActions + row.actionIndex !== calculateTotalActions(actor.str, actor.int).count) throw new Error('Encontro persistido inconsistente.');
     const c = this.state.combatState;
     Object.assign(c, { active: true, encounterId: row.id, chamberId: row.chamberId, biome: row.biome, round: row.round, activeParticipantId: row.activeParticipantId,
       remainingActions: row.remainingActions, actionIndex: row.actionIndex, fleeMode: row.fleeMode, isPaused: row.isPaused, turnToken: row.turnToken });
-    c.turnOrder.splice(0, c.turnOrder.length, ...JSON.parse(row.turnOrderJson)); this.cutoffs = JSON.parse(row.cutoffsJson);
+    c.turnOrder.splice(0, c.turnOrder.length, ...order); this.cutoffs = cutoffs;
+    this.encounterStatus = 'ACTIVE'; this.unlockAt = 0; c.isProcessingAction = false;
     this.state.sessionStatus = 'IN_COMBAT'; this.syncVitals();
   }
   private object(input: unknown): Record<string, unknown> { if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Comando inválido.'); return input as Record<string, unknown>; }

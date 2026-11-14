@@ -14,8 +14,8 @@ export function CombatOverlay() {
   const actor = store.participants.find(p => p.id === c.activeParticipantId);
   const ownTurn = actor && (game.role === 'MASTER' ? actor.kind === 'MONSTER' && store.manualMonsterId === actor.id : actor.id === game.playerId);
   const disabled = !c.active || !ownTurn || c.isPaused || store.pending || now < store.busyUntil || game.connectionState !== 'CONNECTED';
-  const allies = store.participants.filter(p => p.kind === (actor?.kind ?? 'PLAYER'));
-  const enemies = store.participants.filter(p => p.kind !== (actor?.kind ?? 'PLAYER'));
+  const side = game.role === 'MASTER' && actor?.kind === 'MONSTER' && store.manualMonsterId === actor.id ? 'MONSTER' : 'PLAYER';
+  const enemies = store.participants.filter(p => p.kind !== side);
   const chosen = store.participants.find(p => p.id === store.targetId && p.hp > 0);
   const enemy = chosen && chosen.kind !== actor?.kind ? chosen : enemies.find(p => p.hp > 0);
   const ally = chosen && chosen.kind === actor?.kind ? chosen : actor;

@@ -5,6 +5,12 @@ import type { BoardMotion } from '../motion';
 
 export function combatEffects(parent: Container, type: AttackType, x: number, y: number, motion: BoardMotion) {
   const effect = new Container(); effect.position.set(x, y); parent.addChild(effect);
+  if ((type === 'FIRE' || type === 'ARCANE') && !motion.reduced)
+    motion.run(() => gsap.to(effect, { rotation: Math.PI * 1.5, duration: .65, ease: 'power1.out' }));
+  if (type === 'BLUNT' || type === 'UNARMED' || type === 'BARBARIAN') {
+    const dust = new Graphics().ellipse(0, 20, 42, 12).fill({ color: 0x9c8870, alpha: .35 }); effect.addChild(dust);
+    motion.run(() => gsap.to(dust, { alpha: 0, duration: .6 }));
+  }
   const color = { FIRE: 0xff793c, ICE: 0x9eeaff, LIGHT: 0xffe3a1, DARKNESS: 0x9354d6, ARCANE: 0xb7a1ff,
     SLASHING: 0xffefcc, BLUNT: 0xd8b78a, THRUST: 0xffe6b9, UNARMED: 0xd8b78a, WARRIOR: 0xffefcc, BARBARIAN: 0xe95b45, ROGUE: 0xc5b2e8 }[type];
   for (let i = 0; i < 15; i++) {

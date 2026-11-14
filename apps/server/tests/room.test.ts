@@ -196,6 +196,37 @@ describe.sequential("sala autoritativa", () => {
     expect(await denied).toContain("autorizada");
     await ana.leave(); await nilo.leave(); await master.leave();
   });
+  it('restores an ACTIVE encounter when recreating the authoritative room and delivers the same turn to rejoining clients', async () => {
+    const saved = database.db.select().from(players).all().find(p => p.name === 'Ana')!;
+    const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const ana = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    master.send('MASTER_SET_HIDDEN', { entityId: 'training-1:monster', hidden: false });
+    await until(() => !room.state.monsters.get('training-1:monster')!.isHiddenByMaster);
+    const denied = ana.waitForMessage('ACTION_ERROR');
+    ana.send('START_COMBAT', { chamberId: 'training-1' }); expect(await denied).toContain('autorizada');
+    database.sqlite.prepare('UPDATE characters SET final_str = 20, speed = 10 WHERE player_id = ?').run(saved.id);
+    master.send('START_COMBAT', { chamberId: 'training-1' }); await until(() => room.state.combatState.active);
+    const events: unknown[] = [], duplicateErrors: string[] = [];
+    ana.onMessage('COMBAT_EVENT', (event: unknown) => events.push(event));
+    ana.onMessage('ACTION_ERROR', (message: string) => duplicateErrors.push(message));
+    const action = { type: 'ATTACK', subType: 'SLASHING', targetId: 'training-1:monster', turnToken: room.state.combatState.turnToken };
+    for (let i = 0; i < 15; i++) ana.send('COMBAT_ACTION', action);
+    await until(() => duplicateErrors.length === 14);
+    expect(events).toHaveLength(1); expect(room.state.combatState.remainingActions).toBe(1);
+    master.send('MASTER_PAUSE_COMBAT', { paused: true }); master.send('MASTER_SET_FLEE_MODE', { mode: 'BLOCKED' });
+    await until(() => room.state.combatState.isPaused && room.state.combatState.fleeMode === 'BLOCKED');
+    const before = room.state.combatState.toJSON(), code = room.roomId;
+    await ana.leave(); await master.leave(); await testServer.cleanup();
+    room = await testServer.createRoom<GameRoom>('game', { bootstrapKey: 'local-key', roomCode: code });
+    expect(room.state.combatState.toJSON()).toEqual(before);
+    const referee = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const rejoined = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
+    await until(() => rejoined.state.combatState?.turnToken === before.turnToken);
+    expect(rejoined.state.combatState.remainingActions).toBe(before.remainingActions);
+    expect([...rejoined.state.combatState.turnOrder]).toEqual(before.turnOrder);
+    referee.send('MASTER_END_COMBAT'); await until(() => !room.state.combatState.active);
+    await rejoined.leave(); await referee.leave();
+  });
   it("restaura sala e aprovação após recriar a sala autoritativa", async () => {
     const saved = database.db.select().from(players).all().find(p => p.name === "Ana")!;
     const code = room.roomId;

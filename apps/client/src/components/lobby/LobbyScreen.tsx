@@ -29,6 +29,6 @@ export function LobbyScreen() {
       <label>Senha do Mestre<input type="password" required maxLength={256} value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password"/></label>
       <button disabled={busy || !(code || hostCode)}>{busy ? "Conectando…" : "Entrar como Mestre"}</button>
     </form></details>
-    <small className="muted">v0.3.0 · Sem cadastro</small>
+    <small className="muted">v0.4.0 · Sem cadastro</small>
   </section>;
 }

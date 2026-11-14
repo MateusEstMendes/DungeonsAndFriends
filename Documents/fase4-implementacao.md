@@ -39,3 +39,13 @@ O servidor monta cada participante a partir de characters: atributos finais, mod
 No editor, Entidades oferece Goblin, Esqueleto Guerreiro e Cultista Arcano. O seletor Bioma da câmara persiste a escolha no mapa e participa de Undo/Redo. A proximidade usa a posição final do movimento e hexDistance dentro da mesma câmara. O bioma é copiado para o encontro ao iniciar.
 
 O estado do combate usa StateView: fila e token de ação ficam disponíveis apenas ao Mestre e aos jogadores da câmara. Participantes do encontro entram na visão dessa câmara para permitir seleção de aliados e inimigos. Eventos e fichas de combate seguem a mesma restrição de audiência. O relógio dos clientes é estimado a partir do servidor para posicionar as animações na linha do tempo do evento, mesmo quando o relógio local está adiantado ou atrasado.
+
+## Persistência v0.4.0
+
+A migração 0003 é aditiva: preserva fichas, mapas, posições, credenciais e sessões de v0.3.0. Seu snapshot Drizzle acompanha o SQL e o journal, permitindo gerar migrações futuras sem recriar as tabelas de combate. Um índice parcial impede dois encontros ACTIVE na mesma sala.
+
+Cada ação grava o encontro, os participantes, os buffs e o HP/MP das fichas em uma transação. O encerramento e a fuga participam dessa mesma gravação. Se o SQLite rejeitar a operação, o executor restaura também o estado em memória, inclusive o token e os recursos; nenhum COMBAT_EVENT de sucesso é publicado.
+
+Ao iniciar a sala, o servidor procura o encontro ACTIVE, valida a fila e o orçamento do turno e restaura o CombatStateSchema antes da entrada dos clientes. Ficam preservados rodada, iniciativa, ações restantes, pausa, modo de fuga, faixas d20, HP/MP, consumíveis, recargas e posturas. Pacotes de ações já consumidas continuam inválidos após a restauração. O cliente recebe o elenco novamente na entrada e na reconexão.
+
+Os testes de persistência reabrem um arquivo SQLite WAL no meio de um turno, recriam a sala Colyseus e atualizam um banco v0.3 construído pelas três primeiras migrações. Triggers de teste provocam falhas durante a gravação para verificar o rollback do banco e da sala. A versão do protocolo e dos três pacotes é 0.4.0; após atualizar o host, recarregue os clientes.

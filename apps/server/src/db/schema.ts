@@ -1,6 +1,6 @@
 import type { RaceId, ArchetypeId } from "@df/shared";
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, unique, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text, unique, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 export const dungeonsMigrations = sqliteTable("_dungeons_migrations", {
   version: text("version").primaryKey(),
@@ -125,14 +125,14 @@ export const monstersCatalog = sqliteTable('monsters_catalog', {
 });
 export const combatEncounters = sqliteTable('combat_encounters', {
   id: text('id').primaryKey(), roomId: text('room_id').notNull().references(() => rooms.id),
-  chamberId: text('chamber_id').notNull(), status: text('status').notNull().default('ACTIVE'),
+  chamberId: text('chamber_id').notNull(), status: text('status', { enum: ['ACTIVE','ENDED','FLED'] }).notNull().default('ACTIVE'),
   biome: text('biome').notNull(), round: integer('round').notNull(),
   turnOrderJson: text('turn_order_json').notNull(), activeParticipantId: text('active_participant_id').notNull(),
   remainingActions: integer('remaining_actions').notNull(), actionIndex: integer('action_index').notNull().default(0),
   fleeMode: text('flee_mode').notNull().default('NORMAL'), isPaused: integer('is_paused', { mode: 'boolean' }).notNull().default(false),
   turnToken: text('turn_token').notNull(), cutoffsJson: text('cutoffs_json').notNull(),
   updatedAt: integer('updated_at').notNull(),
-}, t => [index('combat_encounters_room_idx').on(t.roomId)]);
+}, t => [index('combat_encounters_room_idx').on(t.roomId), uniqueIndex('combat_encounters_one_active').on(t.roomId).where(sql`${t.status} = 'ACTIVE'`)]);
 export const combatParticipants = sqliteTable('combat_participants', {
   id: text('id').notNull(), encounterId: text('encounter_id').notNull().references(() => combatEncounters.id),
   kind: text('kind').notNull(), statsJson: text('stats_json').notNull(),

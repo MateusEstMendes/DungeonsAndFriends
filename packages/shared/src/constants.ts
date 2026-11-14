@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = "0.3.0" as const;
+export const PROTOCOL_VERSION = "0.4.0" as const;
 export const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const ROOM_CODE_LENGTH = 5;
 

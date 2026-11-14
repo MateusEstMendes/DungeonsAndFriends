@@ -1,6 +1,6 @@
 # Dungeons & Friends
 
-Fase 3 `v0.3.0`: monorepo pnpm com TypeScript, React 19 / Vite 8 / Tailwind 4, Colyseus 0.18, SQLite / Drizzle, tabuleiro PixiJS 8 e animações GSAP.
+Fase 4 `v0.4.0`: monorepo pnpm com TypeScript, React 19 / Vite 8 / Tailwind 4, Colyseus 0.18, SQLite / Drizzle, tabuleiro e arena POV PixiJS 8, combate autoritativo e animações GSAP.
 
 ## Começar uma mesa
 
@@ -57,6 +57,8 @@ O servidor envia heartbeat a cada 20 segundos e responde ao ping do cliente. Os 
 O banco padrão é `apps/server/dungeons.db`, com WAL, timeout de 5 segundos e chaves estrangeiras. Migrações são aplicadas antes de o servidor ficar pronto. `DATABASE_PATH` permite escolher outro arquivo; prefira um caminho absoluto.
 
 As tabelas em `apps/server/src/db/schema.ts` incluem `rooms`, `players`, `characters`, `sessions`, `maps`, `chambers`, `terrain_cells`, `walls`, `placed_objects`, `editor_history` e `_dungeons_migrations`. Datas usam milissegundos Unix. O Drizzle mantém seu controle nativo em `__drizzle_migrations`; o ledger do jogo registra a versão `0.1.0` e o checksum da migração inicial. A migração `0002` adiciona mapas e posições, e o seed transacional cria três câmaras conectadas quando não há mapas.
+
+A migração `0003_add_combat_system.sql` adiciona `monsters_catalog`, `combat_encounters`, `combat_participants` e `active_buffs`, com catálogo inicial e um encontro ativo por sala. HP/MP, participantes e turno são gravados na mesma transação SQLite. Encontros `ACTIVE` são restaurados ao iniciar a sala, preservando rodada, fila, participante ativo, ações restantes, pausa, modo de fuga, buffs e token da próxima ação. O cliente aprovado pode usar **Continuar sessão** para reabrir a arena. Encontros encerrados ou concluídos por fuga não são retomados.
 
 Para alterar a estrutura, edite `schema.ts`, rode `pnpm db:generate`, revise o SQL gerado e execute `pnpm db:migrate`. Versione os arquivos SQL e seus metadados. Não altere uma migração já aplicada: gere outra. Faça backup antes de mudanças que removam ou transformem dados.
 

@@ -1,4 +1,4 @@
-import { Container, Sprite, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { gsap } from 'gsap';
 import type { BoardMotion } from '../motion';
 import type { CombatEvent } from '../../store/useCombatStore';
@@ -23,9 +23,14 @@ export function floatingText(parent: Container, camera: Container, event: Combat
     ghost.scale.set(defender.scale.x * defender.parent.scale.x, defender.scale.y * defender.parent.scale.y); ghost.tint = 0x80caff; ghost.alpha = .45;
     parent.addChild(ghost);
     motion.run(() => gsap.to(ghost, { x: ghost.x + (motion.reduced ? 0 : 60), alpha: 0, duration: .6, onComplete: () => { if (!ghost.destroyed) ghost.destroy(); } }));
+  } else if (dodged) {
+    const silhouette = new Graphics().circle(0,-35,15).fill({ color: 0x80caff, alpha: .45 })
+      .poly([-15,-18,15,-18,27,35,-27,35]).fill({ color: 0x80caff, alpha: .35 });
+    silhouette.position.set(x,y + 35); parent.addChild(silhouette);
+    motion.run(() => gsap.to(silhouette, { x: x + (motion.reduced ? 0 : 60), alpha: 0, duration: .6, onComplete: () => { if (!silhouette.destroyed) silhouette.destroy(); } }));
   }
   if (event.drAbsorbed) {
-    const shield = new Text({ text: `⬡ DR ${event.drAbsorbed}`, style: { fontFamily: 'sans-serif', fontSize: 16, fill: 0xcbd7ec, stroke: { color: 0x17101e, width: 3 } } });
+    const shield = new Text({ text: `⛨ DR ${event.drAbsorbed}`, style: { fontFamily: 'sans-serif', fontSize: 16, fill: 0xcbd7ec, stroke: { color: 0x17101e, width: 3 } } });
     shield.anchor.set(.5); shield.position.set(x, y + 30); parent.addChild(shield);
     motion.run(() => gsap.to(shield, { alpha: 0, y: y + (motion.reduced ? 30 : 5), duration: 1.3, onComplete: () => { if (!shield.destroyed) shield.destroy(); } }));
   }
