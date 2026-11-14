@@ -3,6 +3,7 @@ import { PROTOCOL_VERSION, RoomCodeSchema, SessionCredentialsPayloadSchema, type
 import { initialGameState, useGameStore } from "../store/useGameStore";
 import { useUIStore } from "../store/useUIStore";
 import { initialBoardState, useBoardStore } from "../store/useBoardStore";
+import { emptyCombat, initialCombatState, useCombatStore, type CombatEvent, type CombatParticipant, type CombatSnapshot } from '../store/useCombatStore';
 
 import { savedSession, persistCredentials, persistReconnectionToken, clearSession } from "./sessionPersistence";
 export { savedSession } from "./sessionPersistence";
@@ -37,8 +38,19 @@ function attach(room: Room<unknown, RoomState>) {
     if (own) screenFor(own.status);
     if (useGameStore.getState().sessionStatus !== state.sessionStatus) useGameStore.setState({ sessionStatus: state.sessionStatus });
     useBoardStore.setState({ chambers: [...state.chambers.values()].map(c => c.toJSON()), monsters: [...state.monsters.values()].map(m => m.toJSON()), objects: [...state.objects.values()].map(o => o.toJSON()), activeStageId: state.activeStageId, explorationMode: state.explorationMode });
+    const combat = state.combatState ? state.combatState.toJSON() as CombatSnapshot : emptyCombat;
+    const previous = useCombatStore.getState().combat;
+    useCombatStore.setState({ combat, ...(previous.turnToken !== combat.turnToken ? { pending: false } : {}), ...(!combat.active ? { manualMonsterId: '' } : {}) });
   };
   room.onStateChange(sync);
+  room.onMessage('PROXIMITY_ALERT', (proximity: { chamberId: string; message: string }) => useCombatStore.setState({ proximity }));
+  room.onMessage('COMBAT_ROSTER', (data: { encounterId: string; participants: CombatParticipant[]; cutoffs: typeof initialCombatState.cutoffs }) => {
+    useCombatStore.setState(s => ({ participants: data.participants, cutoffs: data.cutoffs,
+      ...(s.combat.encounterId !== data.encounterId ? { events: [], targetId: '', pending: false } : {}) }));
+  });
+  room.onMessage('COMBAT_EVENT', (event: CombatEvent) => useCombatStore.setState(s => ({
+    events: [...s.events.filter(e => e.id !== event.id), event].slice(-40), pending: false, busyUntil: Date.now() + event.duration,
+  })));
   room.onMessage("ACTIVE_VISION", (data: { chamberId: string; cells: string[] }) => useBoardStore.setState({ visionChamberId: data.chamberId, activeVision: data.cells }));
   room.onMessage("SESSION_CREDENTIALS", (input: unknown) => {
     const parsed = SessionCredentialsPayloadSchema.safeParse(input);
@@ -49,7 +61,7 @@ function attach(room: Room<unknown, RoomState>) {
     if (room.state?.players) sync(room.state);
   });
   room.onMessage("APPROVAL_RESULT", (status: ApprovalStatus) => screenFor(status));
-  room.onMessage("ACTION_ERROR", (message: string) => useUIStore.getState().setNotice(message));
+  room.onMessage("ACTION_ERROR", (message: string) => { useCombatStore.setState({ pending: false }); useUIStore.getState().setNotice(message); });
   room.onMessage("PING", (timestamp: number) => room.send("PONG", timestamp));
   let pingSent = 0;
   room.onMessage("PONG", (timestamp: number) => {
@@ -118,6 +130,7 @@ export async function leaveRoom(forget = false) {
   if (forget) clearSession();
   useGameStore.setState({ ...initialGameState });
   useBoardStore.setState({ ...initialBoardState });
+  useCombatStore.setState({ ...initialCombatState });
   useUIStore.setState({ screen: "LOBBY", notice: "" });
   await room?.leave();
 }

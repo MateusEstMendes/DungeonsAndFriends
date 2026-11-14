@@ -17,7 +17,7 @@ const { room } = prepareHost(database);
 const playerId = randomUUID(), name = "Teste tabuleiro";
 const token = signSessionToken({ playerId, roomId: room.id, role: "PLAYER" }, process.env.SESSION_SECRET);
 database.db.insert(players).values({ id: playerId, roomId: room.id, name, sessionToken: token, approvalStatus: "APPROVED" }).run();
-const character = database.db.insert(characters).values({ ...prepareCharacter(characterPayload()), name: "Ael de Teste", playerId, roomId: room.id }).returning().get();
+const character = database.db.insert(characters).values({ ...prepareCharacter(characterPayload()), name: "Ael de Teste", finalStr: 20, playerId, roomId: room.id }).returning().get();
 database.sqlite.prepare("UPDATE players SET character_id = ? WHERE id = ?").run(character.id, playerId);
 writeFileSync(".local/e2e-player.json", JSON.stringify({ roomCode: room.code, name, token }));
 database.close();
