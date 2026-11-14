@@ -31,6 +31,8 @@ Ctrl+C encerra o servidor e o túnel. Execute apenas uma instância na porta 256
 - `pnpm build`: compila shared antes das aplicações.
 - `pnpm typecheck`: verifica TypeScript nos três pacotes.
 - `pnpm test`: testes de contratos, serialização, autenticação, SQLite, aprovação e reconexão usando `@colyseus/testing` (porta local 2568).
+- `pnpm test:combat`: regras determinísticas, dados, migração e executor de combate.
+- `pnpm test:combat-sim`: simula 10.000 turnos sem interface e apresenta dano, cura e esquivas.
 - `pnpm test:e2e`: testes Chromium do tabuleiro em desktop e mobile, após `pnpm build`. Usa banco separado em `.local/` e servidor na porta 4179; encerra o servidor ao terminar. No Windows usa o Chrome instalado; `CHROME_PATH` permite informar outro executável Chromium.
 - `pnpm db:generate`: gera uma nova migração a partir de `schema.ts`.
 - `pnpm db:migrate`: aplica migrações pendentes.
@@ -65,6 +67,8 @@ Para alterar a estrutura, edite `schema.ts`, rode `pnpm db:generate`, revise o S
 - [Validação e teste manual](Documents/fase1-validacao.md)
 - [Escopo da Fase 3](Documents/Fase3.md)
 - [Validação da Fase 3](Documents/fase3-validacao.md)
+- [Escopo da Fase 4](Documents/Fase4.md)
+- [Implementação do combate](Documents/fase4-implementacao.md)
 
 ## Tabuleiro e editor
 
