@@ -33,7 +33,7 @@ test('Mestre observa herói, comanda criatura e identifica impacto no jogador', 
   await expect(gm.locator('.combat-heading')).toContainText('Observando turno de Ael de Teste');
   await expect(gm.getByRole('navigation', { name: 'Ações de combate' })).toHaveCount(0);
   await player.getByRole('button', { name: 'Atacar', exact: true }).click();
-  await player.getByRole('button', { name: 'Corte', exact: true }).click();
+  await player.getByRole('button', { name: 'Desarmado', exact: true }).click();
   await expect(player.locator('.active-portrait')).toContainText('1 ação(ões)');
   await expect(player.getByRole('button', { name: 'Fugir', exact: true })).toBeDisabled();
   await expect(player.locator('.combat-dice-status span')).toContainText('d20:');
@@ -44,9 +44,9 @@ test('Mestre observa herói, comanda criatura e identifica impacto no jogador', 
   await player.screenshot({ path: '.local/phase4-player-mobile.png' });
   expect(await player.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await player.getByRole('button', { name: 'Defender', exact: true }).click();
-  await player.getByRole('button', { name: 'Bloqueio de Escudo', exact: true }).click();
+  await player.getByRole('button', { name: 'Esquiva Ativa', exact: true }).click();
   await gm.getByText('Controlar monstro', { exact: true }).click();
-  await gm.getByRole('button', { name: 'Goblin', exact: true }).click();
+  await gm.getByRole('button', { name: /^Goblin · Manual/ }).click();
   await expect(gm.locator('.combat-heading')).toContainText('Controlando: Goblin');
   await gm.getByRole('button', { name: 'Atacar', exact: true }).click();
   await expect(gm.getByRole('button', { name: 'Fogo', exact: true })).toHaveCount(0);

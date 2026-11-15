@@ -25,12 +25,3 @@ export function getMonsterDefinition(nameOrId: string): MonsterDefinition | unde
   const legacy = value === 'sentinela' ? 'SKELETON_WARRIOR' : value === 'monstro' ? 'GOBLIN' : nameOrId;
   return MONSTER_CATALOG.find(monster => monster.id === legacy || monster.name.toLocaleLowerCase('pt-BR') === value);
 }
-
-/** Until equipment arrives, a creature uses its catalog attack and matching support. */
-export function canUseMonsterAction(attackType: AttackType, action: import('../combat/actions.js').CombatAction): boolean {
-  if (action.type === 'ATTACK') return action.subType === attackType;
-  if (action.type === 'ITEM' || action.type === 'SPELL') return false;
-  if (action.type === 'FLEE') return true;
-  return action.subType === 'ACTIVE_DODGE' || action.subType === 'SHIELD_BLOCK'
-    || ['FIRE', 'ICE', 'LIGHT', 'DARKNESS', 'ARCANE'].includes(attackType);
-}

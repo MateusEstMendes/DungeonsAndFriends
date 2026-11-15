@@ -5,7 +5,7 @@ import type { CombatEvent } from '@df/shared';
 import { CombatOverlay } from '../src/components/combat/CombatOverlay';
 import { initialCombatState, selectMonster, useCombatStore, type CombatParticipant } from '../src/store/useCombatStore';
 import { initialGameState, useGameStore } from '../src/store/useGameStore';
-import { combatActionText, combatResultText } from '../src/components/combat/presentation';
+import { combatActionText, combatResultText, combatFloatingText } from '../src/components/combat/presentation';
 // SSR normally reads the store's original snapshot; use the arranged client snapshot.
 vi.mock('../src/store/useCombatStore', async importOriginal => {
   const actual = await importOriginal<typeof import('../src/store/useCombatStore')>();
@@ -17,7 +17,7 @@ vi.mock('../src/store/useGameStore', async importOriginal => {
 });
 vi.mock('../src/network/colyseusClient', () => ({ boardCommand: vi.fn() }));
 const participant: CombatParticipant = { id: 'hero', name: 'Ael', kind: 'PLAYER', hp: 50, maxHp: 50, mp: 20, maxMp: 20,
-  defense: 10, dexMod: 0, passiveDodge: 0, flatDR: 0, str: 10, int: 10, dex: 10, speed: 3, archetypeId: 'MAGE', attackType: 'ARCANE', baseDamage: 6, cooldowns: {}, potions: 2 };
+  defense: 10, dexMod: 0, passiveDodge: 0, flatDR: 0, str: 10, int: 10, dex: 10, speed: 3, archetypeId: 'MAGE', attackType: 'ARCANE', baseDamage: 6, cooldowns: {}, wis: 10, baseSpeed: 3, equipment: { mainHand: null, offHand: null, armor: null }, spells: [], consumables: [], buffs: [], actions: [], isAutoMode: false, allowAutoFlee: false };
 const monster: CombatParticipant = { ...participant, id: 'goblin', name: 'Goblin 2', kind: 'MONSTER', attackType: 'THRUST' };
 const event: CombatEvent = { id: 'hit', encounterId: 'encounter', actorId: monster.id, actorName: monster.name, actorKind: 'MONSTER',
   targetId: 'hero', targetName: 'Ael', targetKind: 'PLAYER', targets: [], type: 'ATTACK', round: 1, startedAt: Date.now(), duration: 1200,
@@ -48,6 +48,8 @@ it('highlights the receiving hero and only applies personal impact to that playe
   expect(renderToStaticMarkup(createElement(CombatOverlay))).not.toContain('combat-own-impact');
 });
 it('distinguishes defense misses, dodge, healing and absorbed damage in text', () => {
+  expect(combatFloatingText({ ...event, outcome: 'MISSED_DEFENSE', damage: 0 })).toBe('Errou!');
+  expect(combatFloatingText(event)).toBe('Crítico! −8');
   expect(combatResultText(event)).toBe('Crítico! −8 HP · DR absorveu 2');
   expect(combatResultText({ ...event, outcome: 'MISSED_DEFENSE', damage: 0 })).toBe('Errou: defesa do alvo');
   expect(combatResultText({ ...event, outcome: 'DODGED_ACTIVE', damage: 0 })).toBe('Esquiva ativa!');

@@ -21,3 +21,4 @@ export * from "./rules/spells.js";
 export * from "./schema/economyPackets.js";
 export * from "./combat/dice.js";
 export * from "./schema/economySnapshots.js";
+export * from './combat/participants.js';

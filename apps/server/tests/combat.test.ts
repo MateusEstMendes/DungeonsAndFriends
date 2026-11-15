@@ -4,6 +4,7 @@ import { characterPayload } from '../../../packages/shared/tests/characterFixtur
 import { openDatabase } from '../src/db/index.js';
 import { characters, players } from '../src/db/schema.js';
 import { prepareHost } from '../src/host.js';
+import { grantStarterKit } from '../src/db/seedEconomy.js';
 import { prepareCharacter } from '../src/rooms/handlers/auth.js';
 import { CombatHandler } from '../src/rooms/handlers/combat.js';
 import { loadBoard, readBoard } from '../src/services/boardRepository.js';
@@ -27,14 +28,16 @@ function setup(filename = ':memory:') {
   const { room } = prepareHost(database, 'test-password');
   const state = new RoomState(); loadBoard(state, readBoard(database));
   const saved = database.db.insert(players).values({ name: 'Hero', roomId: room.id, sessionToken: 'hero' }).returning().get();
-  const character = database.db.insert(characters).values({ ...prepareCharacter(characterPayload()), playerId: saved.id, roomId: room.id,
+  const character = database.db.insert(characters).values({ ...prepareCharacter({ ...characterPayload(), archetypeId: 'WARRIOR' }), playerId: saved.id, roomId: room.id,
     finalStr: 20, finalDex: 20, finalInt: 10, speed: 10, hp: 100, maxHp: 100 }).returning().get();
+  grantStarterKit(database.db, character.id);
+  database.db.update(characters).set({ finalDex: 20, speed: 10, defense: 13 }).where(eq(characters.id, character.id)).run();
   const hero = Object.assign(new PlayerSchema(), { id: saved.id, characterId: character.id, hp: 100, maxHp: 100, status: 'READY', connected: true, currentChamberId: 'training-1', q: 3, r: -1 });
   state.players.set(hero.id, hero);
-  const master = Object.assign(new PlayerSchema(), { id: room.id, role: 'MASTER' });
+  const master = Object.assign(new PlayerSchema(), { id: room.id, role: 'MASTER', connected: true }); state.players.set(master.id, master);
   let now = 1000;
   const send = vi.fn();
-  const combat = new CombatHandler(state, database, room.id, send, () => {}, faces => faces === 100 ? 100 : 15, () => now);
+  const combat = new CombatHandler(state, database, room.id, send, () => {}, faces => faces === 100 ? 100 : faces === 20 ? 15 : Math.min(4, faces), () => now);
   return { database, room, state, hero, master, combat, send, wait: () => { now += 1300; } };
 }
 it.each(MONSTER_CATALOG)('starts an encounter with $name and resolves its catalog attack', definition => {
@@ -80,7 +83,7 @@ it('keeps consumables on departure, hides absent targets and reinserts without r
   state.players.set(ally.id, ally);
   combat.start({ chamberId: 'training-1' });
   combat.action(hero, { type: 'ITEM', itemId: 'HEALTH_POTION', targetId: hero.id, turnToken: state.combatState.turnToken });
-  expect(combat.snapshot().participants.find(p => p.id === hero.id)?.potions).toBe(1);
+  expect(combat.snapshot().participants.find(p => p.id === hero.id)?.consumables.find(i => i.itemId === 'HEALTH_POTION')?.quantity).toBe(1);
   combat.removePlayer(hero.id);
   expect(combat.snapshot().participants.some(p => p.id === hero.id)).toBe(false);
   const token = state.combatState.turnToken, actor = state.combatState.activeParticipantId;
@@ -89,7 +92,7 @@ it('keeps consumables on departure, hides absent targets and reinserts without r
   hero.connected = true;
   combat.addPlayer({ targetPlayerId: hero.id });
   expect(state.combatState.turnToken).toBe(token); expect(state.combatState.activeParticipantId).toBe(actor);
-  expect(combat.snapshot().participants.find(p => p.id === hero.id)?.potions).toBe(1);
+  expect(combat.snapshot().participants.find(p => p.id === hero.id)?.consumables.find(i => i.itemId === 'HEALTH_POTION')?.quantity).toBe(1);
   expect(state.combatState.turnOrder.at(-1)).toBe(hero.id);
   expect(() => combat.addPlayer({ targetPlayerId: hero.id })).toThrow();
 });
@@ -131,7 +134,7 @@ it('uses phase 2 persisted attributes and phase 3 biome to resolve minimum damag
   combat.start({ chamberId: 'training-1' });
   expect(state.combatState.biome).toBe('FOREST');
   combat.action(hero, { type: 'ATTACK', subType: 'SLASHING', targetId: 'training-1:monster', turnToken: state.combatState.turnToken });
-  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ rawDamage: 4, damage: 1, drAbsorbed: 3 }), 'training-1');
+  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ rawDamage: 2, damage: 1, drAbsorbed: 1 }), 'training-1');
 });
 it('consumes active dodge on the next incoming attack with zero damage on a winning counter-check', () => {
   const { combat, hero, master, state, wait, send } = setup(); combat.start({ chamberId: 'training-1' });
@@ -154,7 +157,7 @@ it('rolls back both SQLite and live state if an action or encounter ending fails
   const { combat, hero, database, state, send } = setup(); combat.start({ chamberId: 'training-1' });
   const before = structuredClone(combat.snapshot()), beforeState = state.combatState.toJSON(); send.mockClear();
   database.sqlite.exec("CREATE TRIGGER reject_combat_update BEFORE INSERT ON combat_participants BEGIN SELECT RAISE(ABORT, 'injected combat failure'); END");
-  const action = { type: 'ATTACK', subType: 'ARCANE', targetId: 'training-1:monster', turnToken: state.combatState.turnToken };
+  const action = { type: 'ITEM', itemId: 'HEALTH_POTION', targetId: hero.id, turnToken: state.combatState.turnToken };
   expect(() => combat.action(hero, action)).toThrow('injected combat failure');
   expect(state.combatState.toJSON()).toEqual(beforeState); expect(combat.snapshot()).toEqual(before);
   expect(database.sqlite.prepare('SELECT remaining_actions, status FROM combat_encounters').get()).toEqual({ remaining_actions: 2, status: 'ACTIVE' });
@@ -164,7 +167,8 @@ it('rolls back both SQLite and live state if an action or encounter ending fails
   database.sqlite.exec('DROP TRIGGER reject_combat_update');
   combat.action(hero, action); expect(state.combatState.remainingActions).toBe(1);
   const stored = database.db.select().from(characters).where(eq(characters.id, hero.characterId)).get()!;
-  expect(stored.mp).toBe(before.participants.find(p => p.id === hero.id)!.mp - 10);
+  expect(stored.mp).toBe(before.participants.find(p => p.id === hero.id)!.mp);
+  expect(database.sqlite.prepare("SELECT quantity FROM inventories WHERE character_id = ? AND item_id = 'HEALTH_POTION'").get(hero.characterId)).toEqual({ quantity: 1 });
 });
 it('reopens a WAL database at the exact paused turn, preserving buffs, queue, actions and old-packet protection', () => {
   mkdirSync('.local', { recursive: true }); const filename = resolve('.local', `fase4-restart-${randomUUID()}.db`); files.push(filename);
@@ -223,7 +227,7 @@ it('upgrades a real v0.3 database without changing characters, maps or credentia
 
 it('numbers identical monsters without losing their catalog identity and never admits the master', () => {
   const { combat, state, hero, master, wait, send } = setup();
-  Object.assign(master, hero.toJSON(), { id: 'master', role: 'MASTER' }); state.players.set(master.id, master);
+  Object.assign(master, { characterId: hero.characterId, status: 'READY', hp: 100, currentChamberId: 'training-1' });
   state.monsters.clear();
   for (const id of ['goblin-a', 'goblin-b']) state.monsters.set(id, Object.assign(new MonsterSchema(), { id, name: 'Goblin', currentChamberId: 'training-1' }));
   hero.characterName = 'Ael'; combat.start({ chamberId: 'training-1' });
@@ -256,7 +260,7 @@ it('uses persisted Defense to miss authoritatively, consumes the action and reco
 });
 it('restores old phase-4 participant JSON with Defense and manual defaults', () => {
   const { combat, hero, state, database, room } = setup(); combat.start({ chamberId: 'training-1' });
-  database.sqlite.exec("UPDATE combat_participants SET stats_json = json_remove(stats_json, '$.defense', '$.isAutoMode', '$.allowAutoFlee')");
+  database.sqlite.exec("UPDATE combat_participants SET stats_json = json_remove(stats_json, '$.defense', '$.isAutoMode', '$.allowAutoFlee', '$.wis')");
   const restored = new RoomState(); loadBoard(restored, readBoard(database)); restored.players.set(hero.id, hero);
   const handler = new CombatHandler(restored, database, room.id, () => {}, () => {}); handler.restore();
   expect(handler.snapshot().participants).toEqual(combat.snapshot().participants);

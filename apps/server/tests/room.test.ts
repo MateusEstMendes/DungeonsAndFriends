@@ -214,7 +214,7 @@ describe.sequential("sala autoritativa", () => {
     const events: unknown[] = [], duplicateErrors: string[] = [];
     ana.onMessage('COMBAT_EVENT', (event: unknown) => events.push(event));
     ana.onMessage('ACTION_ERROR', (message: string) => duplicateErrors.push(message));
-    const action = { type: 'ATTACK', subType: 'SLASHING', targetId: 'training-1:monster', turnToken: room.state.combatState.turnToken };
+    const action = { type: 'ATTACK', subType: 'UNARMED', targetId: 'training-1:monster', turnToken: room.state.combatState.turnToken };
     for (let i = 0; i < 15; i++) ana.send('COMBAT_ACTION', action);
     await until(() => duplicateErrors.length === 14);
     expect(events).toHaveLength(1); expect(room.state.combatState.remainingActions).toBe(1);
@@ -437,5 +437,21 @@ describe.sequential("sala autoritativa", () => {
       const log = master.waitForMessage('LOG_SYNC'); master.send('REQUEST_LOG'); expect((await log).entries.some((e: import('@df/shared').SessionLogEntry) => e.type === 'DICE')).toBe(true);
     } finally { await ana.leave(); await companion.leave(); await remote.leave(); await master.leave(); }
   }, 20_000);
+
+  it('runs monster AI within the animation window instead of waiting for the 20-second heartbeat', async () => {
+    const saved = database.db.select().from(players).all().find(p => p.name === 'Ana')!;
+    const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const hero = await testServer.connectTo(room, { name: saved.name, sessionToken: saved.sessionToken, ...version });
+    const events: import('@df/shared').CombatEvent[] = []; hero.onMessage('COMBAT_EVENT', event => events.push(event));
+    try {
+      master.send('START_COMBAT', { chamberId: 'training-1' }); await until(() => room.state.combatState.active);
+      master.send('MASTER_SET_GLOBAL_AI', { enabled: true }); await until(() => room.state.combatState.globalAiEnabled);
+      const started = Date.now(); master.send('MASTER_FORCE_TURN_SKIP');
+      await until(() => events.some(e => e.actorKind === 'MONSTER' && e.type === 'ATTACK'));
+      expect(Date.now() - started).toBeLessThan(4000);
+      master.send('MASTER_SET_GLOBAL_AI', { enabled: false }); await until(() => !room.state.combatState.globalAiEnabled);
+      master.send('MASTER_END_COMBAT'); await until(() => !room.state.combatState.active);
+    } finally { await hero.leave(); await master.leave(); }
+  });
 
 });

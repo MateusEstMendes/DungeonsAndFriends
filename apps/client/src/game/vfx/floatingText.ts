@@ -1,4 +1,4 @@
-import { combatResultText } from '../../components/combat/presentation';
+import { combatFloatingText } from '../../components/combat/presentation';
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { gsap } from 'gsap';
 import type { BoardMotion } from '../motion';
@@ -7,7 +7,7 @@ import type { CombatEvent } from '../../store/useCombatStore';
 export function floatingText(parent: Container, camera: Container, event: CombatEvent, x: number, y: number, motion: BoardMotion, defender?: Sprite) {
   const dodged = event.outcome?.startsWith('DODGED'), critical = event.outcome === 'CRITICAL';
   const healing = !event.damage && !!event.healAmount;
-  const message = combatResultText(event);
+  const message = combatFloatingText(event);
   const text = new Text({ text: message, style: { fontFamily: 'Georgia', fontSize: critical ? 44 : 30,
     fontWeight: 'bold', fill: dodged ? 0x80caff : critical ? 0xffdc77 : healing ? 0x9ae6bc : 0xff776e,
     stroke: { color: 0x17101e, width: 4 } } });

@@ -18,11 +18,11 @@ export function diceAnimation(parent: Container, rolls: { faces: number; value: 
         tl.from(die, { y: -34, rotation: -Math.PI * 2, alpha: 0, duration: .55 }, 0);
         tl.from(result, { alpha: 0, duration: .12 }, .4);
       }
-      tl.to(die, { alpha: 0, duration: .25 }, 1.8);
+      tl.to(die, { alpha: 0, duration: .2 }, .9);
       tl.call(() => { if (!die.destroyed) die.destroy({ children: true }); });
       if (elapsed > 0) tl.seek(elapsed);
     });
   });
-  motion.run(() => gsap.delayedCall(2.1, () => { if (!tray.destroyed) tray.destroy({ children: true }); }));
+  motion.run(() => gsap.delayedCall(1.2, () => { if (!tray.destroyed) tray.destroy({ children: true }); }));
   return tray;
 }

@@ -85,16 +85,19 @@ export class CombatPOVScene {
       if (document.hidden) continue;
       const elapsed = Math.max(0, (Date.now() + useCombatStore.getState().serverClockOffset - event.startedAt) / 1000);
       if (elapsed > 3) continue;
-      // Hero impacts belong to their DOM cards; never draw them over an unrelated monster.
-      if (event.targetKind === 'PLAYER') { diceAnimation(this.dice, event.rolls, this.effectsMotion, elapsed); continue; }
-      const plate = this.plates.get(event.targetId), point = plate ? { x: plate.root.x, y: plate.root.y - 100 * plate.root.scale.y } : { x: w / 2, y: h * .73 };
       diceAnimation(this.dice, event.rolls, this.effectsMotion, elapsed);
-      this.effectsMotion.run(() => {
-        gsap.delayedCall(this.effectsMotion.reduced ? 0 : Math.max(0, .55 - elapsed), () => {
-          if (event.vfxType && (event.damage ?? 0) > 0) combatEffects(this.effects, event.vfxType, point.x, point.y, this.effectsMotion);
-          floatingText(this.effects, this.root, event, point.x, point.y - 30, this.effectsMotion, plate?.sprite);
+      const targets = event.targets.length ? event.targets : [event];
+      for (const result of targets) {
+        if (result.targetKind === 'PLAYER') continue;
+        const plate = this.plates.get(result.targetId); if (!plate) continue;
+        const point = { x: plate.root.x, y: plate.root.y - 100 * plate.root.scale.y }, impact = { ...event, ...result, targets: [] };
+        this.effectsMotion.run(() => {
+          gsap.delayedCall(this.effectsMotion.reduced ? 0 : Math.max(0, .55 - elapsed), () => {
+            if (impact.vfxType && (impact.damage ?? 0) > 0) combatEffects(this.effects, impact.vfxType, point.x, point.y, this.effectsMotion);
+            floatingText(this.effects, this.root, impact, point.x, point.y - 30, this.effectsMotion, plate.sprite);
+          });
         });
-      });
+      }
     }
   }
   private async loadMonsterImage(id: string, plate: MonsterPlate, url: string) {

@@ -74,7 +74,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.combat = new CombatHandler(this.state, this.services.database, record.id, (name, data, audience) => {
       chamberSend(name, data, audience);
       if (name === 'COMBAT_EVENT') this.chatAndLog.recordCombat(data as import('@df/shared').CombatEvent, audience);
-    }, () => this.refreshViews());
+    }, () => this.refreshViews(), undefined, undefined, p => { if (p.status === 'READY') this.shop.syncInventory(p); });
     this.combat.restore();
     for (const player of this.state.players.values()) this.combat.removePlayer(player.id);
     const master = new MasterHandler(this.state, this.services.database, record.id, this.movement, () => this.refreshViews());
@@ -108,6 +108,8 @@ export class GameRoom extends Room<{ state: RoomState }> {
     command('START_COMBAT', true, (_p, input) => this.combat.start(input));
     command('MASTER_SET_CHAMBER_BIOME', true, (_p, input) => master.biome(input));
     command('COMBAT_ACTION', false, (p, input) => this.combat.action(p, input));
+    command('MASTER_SET_MONSTER_AI', true, (_p, input) => this.combat.setMonsterAi(input));
+    command('MASTER_SET_GLOBAL_AI', true, (_p, input) => this.combat.setGlobalAi(input));
     command('MASTER_PAUSE_COMBAT', true, (_p, input) => this.combat.pause(input));
     command('MASTER_SET_FLEE_MODE', true, (_p, input) => this.combat.fleeMode(input));
     command('MASTER_REORDER_INITIATIVE', true, (_p, input) => this.combat.reorder(input));
@@ -150,13 +152,17 @@ export class GameRoom extends Room<{ state: RoomState }> {
       this.log("heartbeat", client, rtt);
       this.services.database.db.update(players).set({ lastSeenAt: Date.now() }).where(eq(players.id, this.bindings.get(client.sessionId)!)).run();
     });
+    let nextHeartbeatAt = Date.now() + 20_000;
     this.setSimulationInterval(() => {
+      this.combat.tick();
+      if (Date.now() < nextHeartbeatAt) return;
+      nextHeartbeatAt = Date.now() + 20_000;
       for (const client of this.clients) {
         const timestamp = Date.now();
         this.heartbeats.set(client.sessionId, timestamp);
         client.send("PING", timestamp);
       }
-    }, 20_000);
+    }, 100);
   }
 
   onAuth(client: Client, input: unknown, context: AuthContext): Identity {
@@ -383,7 +389,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
   private sendLog(player: PlayerSchema) {
     for (const client of this.clients) if (this.bindings.get(client.sessionId) === player.id) client.send('LOG_SYNC', { entries: this.chatAndLog.history(player) });
   }
-  private refreshViews() { this.fov.refresh(this.clients, client => this.bindings.get(client.sessionId)); }
+  private refreshViews() { this.combat?.syncMonsterModes(); this.fov.refresh(this.clients, client => this.bindings.get(client.sessionId)); }
   private log(event: string, client: Client, rttMs?: number) {
     console.log(JSON.stringify({ timestamp: new Date().toISOString(), event, roomCode: this.roomId, ip: this.ips.get(client.sessionId) ?? "unknown", rttMs: rttMs ?? null }));
   }

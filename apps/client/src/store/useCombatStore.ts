@@ -1,10 +1,6 @@
 import { create } from 'zustand';
-import type { AttackType, CombatantStats, CombatEvent } from '@df/shared';
-export interface CombatParticipant extends CombatantStats {
-  id: string; name: string; catalogName?: string; kind: 'PLAYER' | 'MONSTER'; str: number; int: number; dex: number;
-  speed: number; mp: number; maxMp: number; archetypeId: string; attackType: AttackType; baseDamage: number;
-  cooldowns: Record<string, number>; potions: number; isAutoMode?: boolean; allowAutoFlee?: boolean;
-}
+import type { CombatParticipant, CombatEvent } from '@df/shared';
+export type { CombatParticipant } from '@df/shared';
 export type { CombatEvent } from '@df/shared';
 export interface CombatSnapshot {
   active: boolean; encounterId: string; chamberId: string; biome: string; round: number; turnOrder: string[];

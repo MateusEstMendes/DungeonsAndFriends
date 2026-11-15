@@ -87,8 +87,33 @@ Implementado conforme `fase5-plano.md`, mantendo o combate JRPG:
 - Testes cobrem venda 50%, bloqueio de item equipado, slots 2H/duas cópias, armadura, passos gastos, scroll duplicado, visibilidade/adjacência, ferramentas do Mestre e rollback de compra/equipamento/scroll/overflow de ouro de baú.
 - Chat testado com TTL de 7 segundos, ausência de gravações SQLite/histórico e expiração/substituição no cliente; histórico de dados/combate é limitado e não sobrevive à criação de outro handler de sala.
 
+## Incremento 5: Etapa 4 — combate persistido e IA por turnos
+
+- O executor monta heróis com equipamento, consumíveis e grimório reais, usando `InventoryRepository`. As ações disponíveis são calculadas no servidor e compartilhadas com o cliente; foram removidas as poções fictícias e listas universais de ataques do menu.
+- Ataques usam os dados da mão selecionada (`MAIN`/`OFF`), ou `1d4` desarmado quando não há arma. Tipos de ataque incompatíveis com o equipamento e habilidades de outro arquétipo são rejeitados. Guerreiro/Bárbaro/Ladino mantêm habilidades e recargas próprias; bloqueio exige escudo para heróis.
+- Magias exigem aprendizado, foco equipado, MP e alvo coerente. Dardo Arcano, Raio Congelante, Explosão Ígnea e Luz Curativa usam dados e modificadores do catálogo; cura usa SAB não negativa. Explosão atinge todos os oponentes vivos, descontando MP uma única vez e retornando um resultado por alvo.
+- Poções de Vida/Mana, Antídoto, Livro Mágico e O Suco são consumidos da mochila na mesma transação SQLite do turno, HP/MP, buffs, iniciativa e token. Se persistir o encontro falhar, inventário e todos os participantes são restaurados e nenhum evento confirmado é emitido.
+- Livro Mágico adiciona +4 mágico e O Suco multiplica o físico por 1,20 antes de críticos/DR; efeitos iguais renovam a duração sem empilhar. A duração de duas rodadas é contada por dois turnos completos do beneficiário; a ação de uso no próprio turno não consome essa duração. Fúria mantém seu prazo por rodada.
+- Raio Congelante reduz velocidade de combate em 1 até o fim do turno do alvo na rodada seguinte. A iniciativa é reordenada quando a velocidade muda; alterações manuais de ordem são preservadas enquanto não houver nova alteração de velocidade. A velocidade de exploração não é sobrescrita pelo debuff.
+- Aranha Gigante aplica veneno por dois turnos no acerto. Cada início de turno envenenado causa 3 HP (valor inicial de balanceamento), registrado como evento `STATUS`; Antídoto remove o efeito. Restaurar um turno já iniciado não reaplica o tick. Buffs e durações são preservados no JSON do participante.
+- `decideMonsterAction` é uma função pura JRPG: prioriza inimigos vivos/presentes com menor HP; conjuradores avaliam cura e proteção de aliados feridos, ataques mágicos com MP e ataque básico físico sem MP. Sem ação compatível com o orçamento extra, defendem ou passam com registro. Fuga só é considerada com permissão individual e sem bloqueio global.
+- A simulação da sala executa a cada 100 ms; o heartbeat continua a cada 20 segundos, sem comandar o relógio do combate. O tick autoritativo executa IA apenas em combate ativo, sem pausa/processamento, após a janela de 1,2s, com Mestre conectado e monstro em automático. Ações automáticas e manuais passam pelo mesmo executor. Retomar manual antes do tick impede a ação automática; um turno manual de monstro também exige Mestre conectado.
+- `MASTER_SET_GLOBAL_AI` altera todos os modos e o padrão dos próximos monstros; `MASTER_SET_MONSTER_AI` permite exceções individuais e `allowAutoFlee`. Trocar modo não repõe HP/MP, ações ou recargas. Modos, padrão global e recursos sobrevivem à restauração; a consulta privilegia o encontro ativo mesmo se timestamps empatarem.
+- O painel do Mestre ganhou controles de IA global, individual e permissão de fuga. Os menus de combate agora vêm do servidor, indicam MP/foco/quantidades e distinguem alvos de ataque e suporte. Feedback e VFX de área usam os resultados individuais, sem aplicar impactos de heróis sobre monstros.
+- A sincronização privada da ficha acompanha os commits do combate. Fichas antigas restauradas passam a usar recursos reais, descartando o contador provisório de poções.
+
+### Validação do incremento 5
+
+- `pnpm build`: passou; permanece o aviso de bundle acima de 500 kB.
+- `pnpm test`: 28 arquivos e 176 testes passaram, incluindo a execução real de IA em sala dentro da janela de animação, sem aguardar o heartbeat.
+- Verificação direcionada: 38 testes de combate, economia/IA e decisão tática passaram, cobrindo dano/MP de área, foco, SAB, consumíveis reais, buffs, SLOW, veneno, rollback total e restauração sem repetir tick, pausa/desconexão do Mestre, controle misto, retomada manual, duração da janela e proibição de fuga.
+- `tests/e2e/combat-magic-ai.spec.ts`: passou em Chromium com personagem mobile, área JRPG, custo de MP, IA global e controle misto.
+- `git diff --check`: passou.
+- Ajustados rótulos flutuantes compactos e duração da bandeja de dados para evitar sobreposição entre ações no mobile; o status e o log mantêm o resultado completo.
+- Testes E2E anteriores de combate foram atualizados para dados e nomes das ações reais, sem presumir dano fixo ou ataques que o personagem não possui.
+
 ## Próximo incremento
 
-Etapa 4: integrar equipamentos, consumíveis e grimório reais ao executor de combate; substituir ataques/pocões provisórios; executar magias individuais/área, buffs, SLOW e veneno; implementar IA por turnos com alternância individual/global e pausa sem o Mestre. As interfaces completas de comércio, ficha/mochila/grimório, chat, dados e log seguem na Etapa 5.
+Etapa 5: interfaces de ficha/mochila/grimório, lojas e baús, ícones SVG, chat efêmero, bandeja de dados e gaveta de log na HUD do tabuleiro e no combate. Os contratos, handlers e stores correspondentes já existem.
 
-A falha de reconexão registrada no primeiro incremento permanece pendente.
+A falha de reconexão registrada no primeiro incremento permanece pendente; a verificação E2E completa da fase segue na Etapa 6.
