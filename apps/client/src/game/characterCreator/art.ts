@@ -21,7 +21,7 @@ export function eyeAperture(option: string): string {
 
 export function pieceArt(layer: LayerId, option: string, race: RaceId): [string, string] {
   let shade = '', ink = '';
-  const broad = race === 'ORC' || race === 'DWARF';
+  const broad = race === 'DWARF';
   if (option === 'none') return ['', ''];
 
   if (layer === '00_back_hair') {
@@ -42,7 +42,12 @@ export function pieceArt(layer: LayerId, option: string, race: RaceId): [string,
 
   if (layer === '10_body_base') {
     const neck = 'M199 297 L198 359 Q195 380 175 391 L217 423 L256 464 L295 423 L337 391 Q317 380 314 359 L313 297 Z';
-    const face = broad
+    // Human proportions with a defined jaw and a gently tapered chin for orcs.
+    const face = race === 'ORC'
+      ? option === 'soft'
+        ? 'M160 171 C153 118 194 78 256 78 C318 78 359 118 352 171 L339 261 Q336 283 321 298 L280 337 Q269 345 256 345 Q243 345 232 337 L191 298 Q176 283 173 261 Z'
+        : 'M160 171 C153 120 198 77 256 77 C314 77 359 120 352 171 L338 263 Q335 285 319 301 L283 334 Q272 344 256 344 Q240 344 229 334 L193 301 Q177 285 174 263 Z'
+      : broad
       ? option === 'soft'
         ? 'M151 153 C150 99 185 77 256 77 C327 77 362 99 361 153 L346 277 Q335 310 285 339 Q256 356 227 339 Q177 310 166 277 Z'
         : 'M149 153 C150 97 187 77 256 77 C325 77 362 97 363 153 L350 276 Q343 304 289 340 Q278 347 256 347 Q234 347 223 340 Q169 304 162 276 Z'
@@ -54,7 +59,10 @@ export function pieceArt(layer: LayerId, option: string, race: RaceId): [string,
     // Hide the neck stroke inside the face, joining the jaw at its actual edge.
     const neckContour = 'M199 297 L198 359 Q195 380 175 391 M313 297 L314 359 Q317 380 337 391';
     ink = `<defs><mask id="neck-contour"><rect width="512" height="512" fill="white"/>${faceShape('black')}</mask></defs><g mask="url(#neck-contour)">${outline(neckContour)}</g>`
-      + faceShape('none', INK) + `<g transform="${headTransform(race)}">${detail(race==='ORC'?'M242 262 Q248 267 252 264 M260 264 Q264 267 270 262':'M248 257 Q250 261 253 259 M261 259 Q264 261 266 257')}</g>`;
+      + faceShape('none', INK) + `<g transform="${headTransform(race)}">${detail('M248 257 Q250 261 253 259 M261 259 Q264 261 266 257')}${race === 'ORC'
+        ? mirror(detail(option === 'soft' ? 'M184 245 Q194 252 204 252' : 'M182 241 L195 249 L207 250'))
+          + detail('M251 229 L248 250')
+        : ''}</g>`;
 
     // One continuous shirt opening, two fitted collar panels, no crossing lapels.
     const shirt = 'M181 386 Q145 406 99 423 Q58 443 35 512 H477 Q454 443 413 423 Q367 406 331 386 L304 408 L270 424 L256 461 L242 424 L208 408 Z';
@@ -79,6 +87,12 @@ export function pieceArt(layer: LayerId, option: string, race: RaceId): [string,
         : 'M167 215 C142 198 137 217 147 237 Q155 251 169 253';
     shade = mirror(path(d) + clipped('ear', path(d), path(pointed ? 'M163 222 L134 211 Q145 231 164 242 Z' : 'M160 220 Q145 212 151 230 L163 243 Z', '#BDBDBD')));
     ink = mirror(outline(contour) + detail(pointed ? 'M134 211 Q150 217 161 230' : 'M150 225 Q148 214 160 219'));
+    if (race === 'ORC') {
+      const interior = 'M143 212 Q152 215 164 223 L166 239 Q153 229 143 212 Z';
+      shade = mirror(path(d));
+      ink = mirror(path(interior, INK).replace('/>', ' opacity="0.12"/>')
+        + outline(contour) + detail('M145 215 Q155 219 161 230'));
+    }
   }
 
   if (layer === '20_skin_details') {
@@ -95,10 +109,7 @@ export function pieceArt(layer: LayerId, option: string, race: RaceId): [string,
       const mark='M178 239 Q187 251 196 254 L185 257 Z';
       shade=mirror(path(mark));
     }
-    if (race === 'ORC') {
-      const scar = 'M325 246 L310 265 L312 259 L299 276 L307 261 L305 265 Z';
-      shade = path(scar, '#B9B9B9'); ink = path('M325 246 L311 264 L299 276', 'none', '#8A7061', 1.1);
-    }
+
   }
 
   if (layer === '40_eyes_iris') {
@@ -126,7 +137,13 @@ export function pieceArt(layer: LayerId, option: string, race: RaceId): [string,
   if (layer === '50_mouth_fangs') {
     const mouth = option === 'smile' ? 'M233 289 Q256 299 279 289' : 'M231 283 Q240 279 252 280 M260 280 Q272 279 281 283';
     ink = path('M247 294 Q256 298 265 294', 'none', INK, 1.5) + path(mouth, 'none', INK, 1.8);
-    if (race === 'ORC') ink += mirror(path('M230 285 Q228 276 233 270 Q233 280 240 284 Z', '#F6EACC', INK, 1.2));
+    if (race === 'ORC') {
+      const lip = option === 'smile' ? 'M235 287 Q256 298 277 287' : 'M235 285 Q256 289 277 285';
+      const tusk = option === 'smile'
+        ? 'M233 288 Q231 281 236 276 Q235 283 240 290 Z'
+        : 'M233 286 Q231 279 236 274 Q235 281 240 287 Z';
+      ink = path(lip, 'none', INK, 1.8) + mirror(path(tusk, '#F6EACC', INK, 1.2));
+    }
     if (race === 'VAMPIRE') ink += mirror(path('M237 282 L240 292 L244 282 Z', '#FAF0DA', INK, 1.1));
     if (race === 'HALF_SHARK') {
       ink = path('M234 289 Q256 285 278 289 L274 294 Q256 298 238 294 Z', '#654C4B');
