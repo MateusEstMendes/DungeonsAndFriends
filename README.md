@@ -1,110 +1,228 @@
 # Dungeons & Friends
 
-Fase 6 (candidata a release): monorepo pnpm com TypeScript, React 19 / Vite 8 / Tailwind 4, Colyseus 0.18, SQLite / Drizzle, tabuleiro e arena POV PixiJS 8, combate autoritativo e animações GSAP.
+**Versão 1.0.0**
 
-## Começar uma mesa
+RPG multiplayer de mesa para jogar com amigos pelo navegador. O Mestre prepara a masmorra, conduz a aventura e controla os encontros; os jogadores criam seus personagens, exploram o tabuleiro e enfrentam monstros em combates por turnos.
 
-Requisitos: Node.js 24, pnpm 12.16.1 e o binário oficial [cloudflared](https://developers.cloudflare.com/tunnel/downloads/) em `.tools/cloudflared.exe` no Windows, `.tools/cloudflared` no Linux/macOS ou no PATH. `CLOUDFLARED_PATH` permite escolher outro caminho. O host verifica o executável antes de iniciar o servidor e informa o caminho esperado se ele estiver ausente.
+A partida reúne tabuleiro hexagonal, visão compartilhada, criação visual de personagens, inventário, lojas e uma arena de combate em perspectiva. Um computador hospeda a mesa e compartilha o acesso com o grupo por link ou QR Code.
+
+## Conteúdo
+
+- [O que o jogo apresenta](#o-que-o-jogo-apresenta)
+- [Como começar uma mesa](#como-começar-uma-mesa)
+- [Controles](#controles)
+- [Sessões e recuperação](#sessões-e-recuperação)
+- [Configuração do host](#configuração-do-host)
+- [Desenvolvimento](#desenvolvimento)
+- [Banco de dados](#banco-de-dados)
+- [Documentação](#documentação)
+
+## O que o jogo apresenta
+
+### Personagens
+
+- Oito raças com modificadores e habilidades passivas: Humano, Anão, Elfo, Orc, Vampiro, Demônio, Meio-Dragão e Meio-Tubarão.
+- Cinco classes: Guerreiro, Bárbaro, Ladino, Mago e Clérigo.
+- Distribuição de atributos por pontos e ficha com os dados do personagem.
+- Personalização visual por camadas, incluindo cabelos, olhos, barba, marcas raciais e chifres, com escolha de cores.
+- Exportação do token do personagem e rascunho de criação salvo no navegador.
+
+### Exploração e masmorras
+
+- Tabuleiro hexagonal com câmaras conectadas por portais.
+- Névoa de guerra e visão compartilhada do grupo, calculada pelo servidor.
+- Terrenos com custos de movimento e obstáculos que bloqueiam a passagem.
+- Modo livre para explorar e modo tenso com orçamento de passos e intervalo de 30 segundos após gastar ou encerrar o movimento.
+- Cenários com biomas de masmorra, caverna, floresta e taverna.
+
+### Ferramentas do Mestre
+
+- Aprovação de entrada dos jogadores e consulta das fichas de personagens conectados ou ausentes.
+- Editor de terreno, paredes, objetos e entidades, com ações de desfazer e refazer.
+- Colocação e reposicionamento de monstros, mercadores, baús, mesas, cadeiras, portas e tochas.
+- Objetos e monstros que podem ficar ocultos para os jogadores.
+- Controle manual ou por IA dos monstros, pausa de combate e configuração de fuga.
+- Reposicionamento de personagens e inclusão de jogadores em um combate em andamento.
+
+### Combate
+
+- Encontros por turnos com iniciativa, rodadas, HP e MP.
+- Ataques, defesas, magias, habilidades de classe, consumíveis e tentativa de fuga.
+- Arena em perspectiva com animações, efeitos visuais e registro de combate.
+- Regras e resultados validados pelo servidor.
+- Catálogo com Goblin, Esqueleto Guerreiro, Cultista Arcano, Slime, Lobo Sombrio, Aranha Gigante, Zumbi, Orc Saqueador, Golem de Pedra e Dragão Jovem.
+
+### Itens e economia
+
+- Inventário, equipamentos, consumíveis e ouro.
+- Baús com recompensas configuradas pelo Mestre.
+- Mercadores com nome, diálogo, estoque e catálogo editáveis.
+- Compra de itens e venda por 50% do preço base; itens equipados precisam ser desequipados antes da venda.
+
+### Áudio e acesso
+
+- Controles de volume geral, música, efeitos e silêncio, salvos no navegador.
+- Efeitos de Trovão e Porta Pesada que o Mestre pode disparar para o grupo.
+- Interface com controles de mouse e toque.
+- Instalação como aplicativo (PWA) em HTTPS ou localhost e cache dos arquivos da interface.
+- Aviso de atualização, com aplicação bloqueada durante o combate.
+
+A interface pode abrir offline após ser armazenada em cache. Para jogar, é necessário estar conectado ao servidor da mesa. O primeiro toque ou clique libera o áudio no navegador.
+
+## Como começar uma mesa
+
+### Requisitos do host
+
+- **Node.js 24**.
+- **pnpm 12.16.1**, conforme o campo `packageManager` do projeto.
+- Binário oficial do [cloudflared](https://developers.cloudflare.com/tunnel/downloads/), necessário para compartilhar a mesa pela internet.
+
+Coloque o executável em `.tools/cloudflared.exe` no Windows ou `.tools/cloudflared` no Linux/macOS. Também é possível disponibilizá-lo no `PATH` ou definir `CLOUDFLARED_PATH`.
+
+### Iniciar e convidar o grupo
 
 ```bash
 pnpm install
 pnpm start:host
 ```
 
-A senha padrão do Mestre neste projeto pessoal é `Mateus2312@`. O terminal mostra o código da sala e informa se a senha padrão ou `MASTER_PASSWORD` está em uso. Abra a URL pública, expanda **Acesso do Mestre** e faça login. Compartilhe o convite ou QR Code com os jogadores; o código da sala vem preenchido pelo parâmetro `?room=`. Cada jogador informa seu nome e aguarda a aprovação do Mestre na fila de pedidos.
+O comando compila o projeto, inicia o servidor e abre um túnel público. O terminal mostra a URL de acesso, o código da sala e as informações de entrada do Mestre.
 
-O Mestre usa **Pedidos** para aprovar ou recusar. O jogador aprovado cria a ficha, exporta seu token e entra no tabuleiro. O Mestre acessa o editor da masmorra e inicia combates com controle manual ou IA.
+1. Abra a URL pública e expanda **Acesso do Mestre**.
+2. Entre com a senha do Mestre. A senha padrão do projeto é `Mateus2312@`; para usar outra, configure `MASTER_PASSWORD` antes de iniciar.
+3. Compartilhe o convite ou QR Code com os jogadores. O link já preenche o código da sala.
+4. Cada jogador informa seu nome e aguarda na fila de pedidos.
+5. O Mestre aprova a entrada pelo menu **Pedidos**.
+6. Os jogadores criam seus personagens e entram no tabuleiro; o Mestre prepara a exploração e os encontros.
 
-O servidor mantém a mesma sala ao reiniciar e aplica a senha padrão também às salas existentes. Para substituir a senha durante a execução:
+Para iniciar com uma senha própria no Linux/macOS:
 
 ```bash
 MASTER_PASSWORD='sua-senha-privada' pnpm start:host
 ```
 
-Sem `MASTER_PASSWORD` no próximo início, a senha volta a ser `Mateus2312@`. A variável é lida pelo processo; arquivos `.env` não são carregados automaticamente. Apenas o hash da senha é armazenado. O segredo de assinatura é gerado em `apps/server/dungeons.db.secret`; preserve esse arquivo junto com o banco para que as sessões continuem válidas. Opcionalmente, forneça um segredo persistente por `SESSION_SECRET`.
+No PowerShell:
 
-Ctrl+C encerra o servidor e o túnel. Execute apenas uma instância na porta 2567: encerre `pnpm dev` antes de usar `pnpm start:host`. A URL pública é temporária e muda ao reiniciar o túnel; os tokens salvos pelo navegador pertencem à origem da URL, portanto uma URL nova exige entrar novamente.
+```powershell
+$env:MASTER_PASSWORD = 'sua-senha-privada'
+pnpm start:host
+```
 
-## Desenvolvimento e verificações
+Use **Ctrl+C** para encerrar o host e o túnel. Mantenha apenas uma instância na porta 2567; encerre `pnpm dev` antes de executar `pnpm start:host`.
 
-- `pnpm dev`: servidor em `http://localhost:2567` e Vite em `http://localhost:5173`, com proxy HTTP/WebSocket.
-- `pnpm build`: compila shared antes das aplicações.
-- `pnpm typecheck`: verifica TypeScript nos três pacotes.
-- `pnpm test`: testes de contratos, serialização, autenticação, SQLite, aprovação e reconexão usando `@colyseus/testing` (porta local 2568).
-- `pnpm test:combat`: regras determinísticas, dados, migração e executor de combate.
-- `pnpm test:combat-sim`: simula 10.000 turnos sem interface e apresenta dano, cura e esquivas.
-- `pnpm test:e2e`: testes Chromium do tabuleiro em desktop e mobile, após `pnpm build`. Usa banco descartável e servidor na porta 4179 para cada cenário; encerra ambos os contextos e o processo ao terminar cada teste. No Windows usa o Chrome instalado; `CHROME_PATH` permite informar outro executável Chromium.
-- `pnpm db:generate`: gera uma nova migração a partir de `schema.ts`.
-- `pnpm db:migrate`: aplica migrações pendentes.
-- `pnpm db:studio`: inspeciona o banco no navegador.
+A URL pública é temporária e muda ao reiniciar o túnel. Como as credenciais do navegador pertencem à origem da URL, um endereço novo exige entrar novamente.
 
-O servidor entrega o cliente compilado, `GET /health` e `GET /api/host-info`. O cliente usa a mesma origem para HTTP e WebSocket; em desenvolvimento há um proxy Vite. Para outro backend, configure `VITE_SERVER_URL` antes de compilar o cliente. `PORT` permite alterar a porta do servidor isolado; o comando de túnel usa 2567.
+## Controles
 
-## Sessões e reconexão
+| Ação | Controle |
+| --- | --- |
+| Mover o personagem | Clique ou toque em um hexágono acessível |
+| Mover a câmera | Arraste o chão do tabuleiro |
+| Aproximar ou afastar | Roda do mouse ou gesto com dois dedos |
+| Reenquadrar o tabuleiro | Botão **Centralizar** |
+| Desfazer edição do Mestre | **Undo** ou `Ctrl+Z` |
+| Refazer edição do Mestre | **Redo** ou `Ctrl+Y` |
+| Mostrar coordenadas e visão | **Debug** ou `Ctrl+Shift+D` |
 
-O navegador guarda `df_session_token`, `df_reconnection_token`, `df_room_code` e `df_player_name`. Após uma queda, o SDK tenta reconectar na janela de tolerância de 60 segundos sem criar outro jogador. Se o host reiniciar, o cliente continua tentando com o token persistente e backoff. Após recarregar a página, o card **Continuar sessão** usa o token nativo e, se necessário, o token assinado persistente. Uma identidade aceita somente uma conexão por vez.
+## Sessões e recuperação
 
-A entrada nova persiste `PENDING_APPROVAL` e entrega credenciais provisórias para recuperar a espera após um reload; elas não concedem aprovação. Ao aprovar, o servidor grava `APPROVED` no banco e renova o token HMAC na mesma transação. O estado sincronizado avança para `NEEDS_CHARACTER_CREATION`, e `SESSION_CREDENTIALS` substitui as credenciais no navegador. O token provisório anterior deixa de ser aceito para um novo `joinById`.
+O banco local preserva a sala, as fichas, os inventários e as alterações do mapa. O navegador guarda as credenciais necessárias para oferecer **Continuar sessão**.
 
-Na restauração da sala, jogadores aprovados com ficha voltam a `READY`, preservando posição, câmara, passos e cooldown, mas permanecem ausentes até se conectarem. Personagens expulsos continuam aguardando nova aprovação. Aprovados sem ficha entram em `NEEDS_CHARACTER_CREATION`; o Mestre permanece `APPROVED`. A chave de `RoomState.players` é o UUID persistente, com vínculo interno entre `sessionId` e UUID. O host e a sala garantem um registro `ACTIVE` em `sessions` sem criar outro a cada reconexão.
+- Após uma queda de conexão, o cliente tenta reconectar automaticamente. A janela de tolerância é de 60 segundos.
+- Sair preserva o personagem para um retorno posterior. **Esquecer sessão neste navegador** remove as credenciais locais, sem apagar a ficha do banco.
+- Expulsar preserva a ficha, mas exige nova aprovação do Mestre para voltar.
+- Após uma interrupção do host, o Mestre pode restaurar ou descartar a sessão recuperável. Um combate restaurado mantém o turno e começa pausado.
+- **Encerrar Sessão** fecha o combate e elimina o marcador de recuperação.
 
-Cancelar um pedido pendente sem ficha libera o nome. Pedidos de retorno com ficha preservam a identidade ao cancelar. Sair depois da aprovação preserva a identidade para voltar. **Esquecer sessão neste navegador** apaga as credenciais locais; isso não remove um jogador já aprovado do banco. Nomes são únicos na sala sem diferenciar maiúsculas de minúsculas; `Mestre` é reservado.
+Preserve o banco e o arquivo de segredo do host para manter os dados e a validade das sessões entre reinicializações.
 
-O menu **Personagens** do Mestre separa conectados e ausentes e permite consultar suas fichas. O personagem aparece no mapa, ocupa uma casa e contribui para a visão compartilhada enquanto está conectado à sala ou dentro dos 60 segundos de tolerância após uma queda. **Sair** remove sua presença imediatamente. Após a ausência definitiva, o personagem também sai da iniciativa e deixa de ser alvo; seu turno avança, e o combate termina se não restar nenhum herói vivo participante.
+## Configuração do host
 
-**Expulsar** remove imediatamente o personagem, inclusive durante a janela de reconexão, e preserva sua ficha. O jogador usa **Continuar sessão** para solicitar nova aprovação. Saídas comuns dispensam essa aprovação. No retorno, o servidor tenta a posição anterior e depois a casa livre mais próxima na mesma câmara. Sem espaço, o jogador aguarda sem token, e o Mestre usa **Posicionar** no menu Personagens para escolher uma casa válida, inclusive em outra câmara. Se houver combate em andamento, **Incluir no combate** adiciona o personagem ao fim da iniciativa por decisão do Mestre, preservando o turno atual.
+As variáveis são lidas do ambiente do processo. Arquivos `.env` não são carregados automaticamente.
 
-O servidor envia heartbeat a cada 20 segundos e responde ao ping do cliente. Os logs registram timestamp ISO, IP mascarado e RTT, sem senhas ou tokens. Somente o Mestre pode aprovar/recusar; clientes não podem criar salas pelo endpoint de matchmaking.
+| Variável | Finalidade |
+| --- | --- |
+| `MASTER_PASSWORD` | Define a senha do Mestre, inclusive para a sala existente. Sem a variável, o host usa a senha padrão do projeto. |
+| `SESSION_SECRET` | Define um segredo persistente para assinar as sessões. Quando omitido, o host gera e mantém um arquivo ao lado do banco. |
+| `DATABASE_PATH` | Escolhe o arquivo SQLite. Prefira um caminho absoluto. |
+| `DB_SYNCHRONOUS` | Aceita `NORMAL` (padrão) ou `FULL`, para maior durabilidade contra perda de energia. |
+| `CLOUDFLARED_PATH` | Informa um caminho alternativo para o executável do túnel. |
+| `PORT` | Altera a porta do servidor isolado. O fluxo `start:host` usa a porta 2567. |
+| `VITE_SERVER_URL` | Define outro backend para o cliente; deve ser configurada antes da compilação. |
+| `CHROME_PATH` | Informa um executável Chromium para os testes de navegador e a auditoria Lighthouse. |
 
-## Banco de dados e migrações
+## Desenvolvimento
 
-O banco padrão é `apps/server/dungeons.db`, com WAL, timeout de 5 segundos e chaves estrangeiras. Migrações são aplicadas antes de o servidor ficar pronto. `DATABASE_PATH` permite escolher outro arquivo; prefira um caminho absoluto.
+O projeto é um monorepo TypeScript com pnpm.
 
-As tabelas em `apps/server/src/db/schema.ts` incluem `rooms`, `players`, `characters`, `sessions`, `maps`, `chambers`, `terrain_cells`, `walls`, `placed_objects`, `editor_history` e `_dungeons_migrations`. Datas usam milissegundos Unix. O Drizzle mantém seu controle nativo em `__drizzle_migrations`; o ledger do jogo registra a versão `0.1.0` e o checksum da migração inicial. A migração `0002` adiciona mapas e posições, e o seed transacional cria três câmaras conectadas quando não há mapas.
+| Área | Tecnologias |
+| --- | --- |
+| Interface | React 19, Vite 8, Tailwind CSS 4 e Zustand |
+| Tabuleiro e combate | PixiJS 8 e GSAP |
+| Comunicação em tempo real | Colyseus 0.18 e WebSocket |
+| Servidor | Node.js, Express e regras autoritativas |
+| Persistência | SQLite e Drizzle ORM |
+| Áudio e PWA | Howler e Workbox |
+| Verificações | Vitest, Playwright e Lighthouse |
 
-A migração `0003_add_combat_system.sql` adiciona `monsters_catalog`, `combat_encounters`, `combat_participants` e `active_buffs`, com catálogo inicial e um encontro ativo por sala. HP/MP, participantes e turno são gravados na mesma transação SQLite. Encontros `ACTIVE` são carregados ao iniciar a sala e conciliados com a presença: a iniciativa e os participantes anteriores são preservados, e o combate fica pausado até o Mestre decidir a recuperação e despausar. Durante uma reconexão dentro da tolerância, rodada, iniciativa e ações restantes são preservadas. Encontros encerrados ou concluídos por fuga não são retomados.
+```text
+apps/
+  client/          Interface, tabuleiro, arena e áudio
+  server/          Salas, regras do servidor, persistência e túnel
+packages/
+  shared/          Contratos, regras, dados e geometria hexagonal
+Documents/
+  Importants/      Planejamento, arquitetura e especificações
+scripts/           Geração de áudio e auditoria
+```
 
-Para alterar a estrutura, edite `schema.ts`, rode `pnpm db:generate`, revise o SQL gerado e execute `pnpm db:migrate`. Versione os arquivos SQL e seus metadados. Não altere uma migração já aplicada: gere outra. Faça backup antes de mudanças que removam ou transformem dados.
+### Executar localmente
 
-## Planejamento e validação
+```bash
+pnpm install
+pnpm dev
+```
 
-- [Visão do jogo](Documents/planejamento-jogo.md)
-- [Escopo da Fase 1](Documents/Fase1.md)
-- [Validação e teste manual](Documents/fase1-validacao.md)
-- [Escopo da Fase 3](Documents/Fase3.md)
-- [Validação da Fase 3](Documents/fase3-validacao.md)
-- [Escopo da Fase 4](Documents/Fase4.md)
-- [Implementação do combate](Documents/fase4-implementacao.md)
+Acesse `http://localhost:5173`. O servidor roda em `http://localhost:2567`, e o Vite encaminha as requisições HTTP e WebSocket.
 
-## Tabuleiro e editor
+Na versão compilada, o servidor entrega o cliente pela mesma origem, além dos endpoints `GET /health` e `GET /api/host-info`.
 
-O seletor **Entidades → Monstro do catálogo** oferece Goblin, Esqueleto Guerreiro, Cultista Arcano, Slime, Lobo Sombrio, Aranha Gigante, Zumbi, Orc Saqueador, Golem de Pedra e Dragão Jovem, com prévia da imagem. As artes fornecidas em `DesignEX/Enemies` são usadas nos tokens e na arena, com arquivos de execução em `apps/client/public/enemies/`. Os tipos ausentes são cadastrados na inicialização sem sobrescrever ajustes existentes; os sete tipos novos têm atributos iniciais para balanceamento.
+### Comandos disponíveis
 
-Cada hexágono aceita um objeto de cada tipo (baú, mesa, cadeira, porta e tocha). Tipos diferentes podem se sobrepor. O servidor bloqueia duplicatas na colocação, no movimento e no Undo/Redo. Objetos acumulados antes dessa regra são preservados e podem ser separados ou removidos pelo painel do Mestre.
+| Comando | Descrição |
+| --- | --- |
+| `pnpm dev` | Inicia cliente e servidor em desenvolvimento |
+| `pnpm start:host` | Compila o projeto e inicia o host com túnel público |
+| `pnpm build` | Compila os pacotes e as aplicações |
+| `pnpm typecheck` | Verifica os tipos nos três pacotes |
+| `pnpm test` | Executa a suíte Vitest |
+| `pnpm test:combat` | Executa os testes das regras, dados e servidor de combate |
+| `pnpm test:combat-sim` | Simula 10.000 turnos sem interface |
+| `pnpm test:e2e` | Executa cenários de navegador com Playwright; requer `pnpm build` |
+| `pnpm test:lighthouse` | Audita o cliente compilado e grava `.local/lighthouse-phase6.json` |
+| `pnpm audio:build` | Regenera os arquivos de áudio originais |
+| `pnpm db:generate` | Gera migrações a partir do schema |
+| `pnpm db:migrate` | Aplica as migrações pendentes |
+| `pnpm db:studio` | Abre a inspeção do banco no navegador |
+| `pnpm db:sanitize` | Verifica integridade e faz manutenção do SQLite com o host parado |
 
-Toque/clique em um hexágono para mover. Arraste o chão para pan, use a roda ou dois dedos para zoom e **Centralizar** para reenquadrar. O modo tenso usa `speed` como orçamento; gastar os passos ou encerrá-los inicia 30 segundos de cooldown. O modo livre aplica intervalo de um segundo. Água rasa custa dois passos; paredes, obstáculos, água profunda e destinos ocupados bloqueiam movimento. Portais transferem para a próxima câmara e descartam a memória de névoa da visita anterior.
+Os testes E2E e a auditoria usam banco descartável e a porta 4179, que precisa estar livre. Os testes de sala usam a porta local 2568.
 
-O editor tem seleção e quatro camadas: Terreno, Paredes, Objetos e Entidades. Terreno amplia os limites. Objetos aceitam rotação e sobreposição; a seleção alterna os elementos do mesmo hexágono, também disponíveis no seletor do painel. **Oculto** controla a visibilidade de objetos e monstros para jogadores. Arrastar um token ou usar coordenadas reposiciona com autoridade do Mestre. **Undo/Redo**, `Ctrl+Z` e `Ctrl+Y` restauram edições; uma edição nova descarta a ramificação de Redo. A restauração rejeita posições que prenderiam ou sobreporiam personagens.
+## Banco de dados
 
-`Ctrl+Shift+D` ou **Debug** mostra coordenadas e alcance de visão. A visão compartilhada de quatro hexágonos é calculada no servidor: `StateView` filtra monstros, objetos e tokens de outros jogadores. A névoa local conserva apenas terreno e paredes da câmara atual. Câmera e tokens usam contextos/timelines GSAP, com limpeza ao sair e respeito a `prefers-reduced-motion`.
+O banco padrão fica em `apps/server/dungeons.db`. As migrações são aplicadas antes de o servidor ficar pronto, e o mapa inicial é criado quando ainda não há mapas.
 
-## Fase 6 — manutenção do SQLite
+O SQLite usa WAL, chaves estrangeiras e gravações transacionais para os estados de jogo. Sem `SESSION_SECRET`, o segredo de assinatura fica em `apps/server/dungeons.db.secret`; mantenha esse arquivo junto com o banco nos backups.
 
-A migração `0005_finalize_mvp_schema.sql` prepara checkpoints de recuperação e índices de consulta. Checkpoints transacionais e a decisão de restauração pós-crash já estão integrados; acompanhe [o progresso da fase 6](Documents/fase6-progresso.md).
+Para alterar a estrutura, edite `apps/server/src/db/schema.ts`, execute `pnpm db:generate`, revise o SQL e rode `pnpm db:migrate`. Versione o SQL e seus metadados. Crie uma nova migração em vez de alterar uma já aplicada.
 
-O banco usa WAL com `synchronous=NORMAL` por padrão. Configure `DB_SYNCHRONOUS=FULL` no ambiente do host para maior durabilidade contra perda de energia. Valores diferentes de NORMAL/FULL são rejeitados.
+Com o host parado, `pnpm db:sanitize` consolida o WAL, verifica a integridade e remove registros antigos elegíveis para limpeza. O comando preserva fichas, inventários, recuperação de sessões ativas e histórico ainda disponível para desfazer/refazer. Faça backup antes de mudanças que removam ou transformem dados.
 
-Com o host parado, rode `pnpm db:sanitize` para consolidar o WAL e verificar integridade. O comando respeita `DATABASE_PATH`, não executa seeds, mantém fichas/inventários e dados de recuperação de sessões ativas, e remove somente sessões CLOSED expiradas (30 dias), checkpoints encerrados antigos, histórico explicitamente descartado e tokens de reconexão antigos. Histórico ainda disponível para Undo/Redo e tokens de sessão são preservados. Leitores que impedirem TRUNCATE ou erros de integridade produzem saída com código 1.
+## Documentação
 
-
-## Áudio, PWA e validação da fase 6
-
-O painel **Áudio** controla volume geral, música, efeitos e silêncio, com preferências salvas no navegador. O primeiro toque libera o som; o Mestre pode enviar Trovão e Porta Pesada para todos. `pnpm audio:build` regenera os assets originais.
-
-Em HTTPS ou localhost, o aplicativo oferece instalação standalone e cache de assets. A interface pode abrir offline; a partida exige o servidor. Atualizações são oferecidas por aviso e ficam bloqueadas durante combate. Depois de queda do host, o cliente tenta reconectar e o Mestre decide restaurar ou descartar a sessão. A restauração preserva o turno e começa pausada. **Encerrar Sessão** fecha o combate e elimina o marcador de recuperação.
-
-`pnpm test:lighthouse` audita a versão compilada com um banco descartável na porta 4179 (deixe essa porta livre). O relatório fica em `.local/lighthouse-phase6.json`. `CHROME_PATH` é opcional; o padrão usa Chromium do Playwright. A meta de performance é 90. A versão atual do Lighthouse não inclui a antiga categoria PWA; manifesto, Service Worker e cache são verificados no Playwright.
-
-Consulte o [roteiro de testes manuais](Documents/fase6-testes-manuais.md) para dispositivos físicos e recuperação.
-
-Resultados e limites de aceite: [validação da fase 6](Documents/fase6-validacao.md). A implementação está pronta para a Mesa Zero; essa sessão humana não foi realizada nesta execução.
+- [Planejamento do jogo](Documents/Importants/planejamento-jogo.md)
+- [Arquitetura técnica](Documents/Importants/arquitetura-tecnica.md)
+- [Especificação das telas](Documents/Importants/especificacao-telas.md)
+- [Roadmap do MVP](Documents/Importants/roadmap-mvp.md)
+- [Controle do Mestre e IA dos monstros](Documents/Importants/controle-mestre-monstros-ia.md)
+- [Direção visual dos inimigos](Documents/Importants/prompt-design-inimigos.md)
