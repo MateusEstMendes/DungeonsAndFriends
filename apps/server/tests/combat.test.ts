@@ -14,7 +14,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import SQLite from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../src/db/schema.js';
-import { seedMaps } from '../src/db/seedMaps.js';
+import { insertLegacyRow, seedLegacyBoard } from './legacyFixture.js';
 const databases: ReturnType<typeof openDatabase>[] = [];
 const files: string[] = [];
 afterEach(() => {
@@ -34,7 +34,7 @@ function setup(filename = ':memory:') {
   const master = Object.assign(new PlayerSchema(), { id: room.id, role: 'MASTER' });
   let now = 1000;
   const send = vi.fn();
-  const combat = new CombatHandler(state, database, room.id, send, () => {}, faces => faces === 100 ? 100 : 10, () => now);
+  const combat = new CombatHandler(state, database, room.id, send, () => {}, faces => faces === 100 ? 100 : 15, () => now);
   return { database, room, state, hero, master, combat, send, wait: () => { now += 1300; } };
 }
 it.each(MONSTER_CATALOG)('starts an encounter with $name and resolves its catalog attack', definition => {
@@ -95,7 +95,10 @@ it('keeps consumables on departure, hides absent targets and reinserts without r
 });
 it('persists exact actions, HP, token, pause and initiative for restoration', () => {
   const { combat, database, room, hero, state } = setup();
+  state.monsters.get('training-1:monster')!.isAutoMode = true;
+  state.monsters.get('training-1:monster')!.allowAutoFlee = true;
   combat.start({ chamberId: 'training-1' });
+  state.combatState.globalAiEnabled = true;
   combat.action(hero, { type: 'ATTACK', subType: 'SLASHING', targetId: 'training-1:monster', turnToken: state.combatState.turnToken });
   combat.pause({ paused: true }); combat.fleeMode({ mode: 'BLOCKED' });
   const restored = new RoomState(); loadBoard(restored, readBoard(database)); restored.players.set(hero.id, hero);
@@ -136,7 +139,7 @@ it('consumes active dodge on the next incoming attack with zero damage on a winn
   wait(); combat.skip(); wait();
   combat.action(master, { type: 'ATTACK', subType: 'SLASHING', targetId: hero.id, turnToken: state.combatState.turnToken }, true);
   expect(hero.hp).toBe(100);
-  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ outcome: 'DODGED_ACTIVE', damage: 0, dodgeRoll: 15 }), 'training-1');
+  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ outcome: 'DODGED_ACTIVE', damage: 0, dodgeRoll: 20 }), 'training-1');
   expect(combat.snapshot().participants.find(p => p.id === hero.id)?.stance).toBe('');
 });
 it('applies warrior cooldowns and rejects abilities belonging to another archetype', () => {
@@ -201,18 +204,61 @@ it('upgrades a real v0.3 database without changing characters, maps or credentia
     sqlite.exec(sql); sqlite.prepare('INSERT INTO __drizzle_migrations(hash,created_at) VALUES (?,?)').run(hash, migration.when);
   }
   const db = drizzle(sqlite, { schema }), legacy = { sqlite, db, close: () => sqlite.close() };
-  seedMaps(db); const { room } = prepareHost(legacy, 'legacy-password');
+  seedLegacyBoard(sqlite); const { room } = prepareHost(legacy, 'legacy-password');
   db.insert(schema.dungeonsMigrations).values({ version: '0.1.0', appliedAt: 1, checksum: foundationHash }).run();
   const player = db.insert(players).values({ name: 'Legacy', roomId: room.id, sessionToken: 'preserve-this-token', approvalStatus: 'APPROVED' }).returning().get();
-  const character = db.insert(characters).values({ ...prepareCharacter(characterPayload()), playerId: player.id, roomId: room.id, hp: 73, mp: 17, posQ: 3, posR: -1 }).returning().get();
+  const character = { ...prepareCharacter(characterPayload()), id: randomUUID(), playerId: player.id, roomId: room.id, hp: 73, mp: 17, posQ: 3, posR: -1, createdAt: Date.now() };
+  insertLegacyRow(sqlite, characters, character);
   db.update(players).set({ characterId: character.id }).where(eq(players.id, player.id)).run(); sqlite.close();
   const upgraded = openDatabase(filename); databases.push(upgraded);
-  expect(upgraded.db.select().from(characters).where(eq(characters.id, character.id)).get()).toEqual(character);
+  expect(upgraded.db.select().from(characters).where(eq(characters.id, character.id)).get()).toMatchObject({ ...character, gold: 50, starterKitGranted: true });
   expect(upgraded.db.select().from(players).where(eq(players.id, player.id)).get()).toMatchObject({ sessionToken: 'preserve-this-token', characterId: character.id });
   expect(upgraded.db.select().from(schema.rooms).get()?.code).toBe(room.code);
   expect(upgraded.db.select().from(schema.chambers).all()).toHaveLength(3);
   expect(upgraded.db.select().from(schema.monstersCatalog).all()).toHaveLength(10);
   upgraded.close(); const second = openDatabase(filename); databases.push(second);
-  expect(second.sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 4 });
+  expect(second.sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 5 });
   expect(second.db.select().from(schema.monstersCatalog).all()).toHaveLength(10);
+});
+
+it('numbers identical monsters without losing their catalog identity and never admits the master', () => {
+  const { combat, state, hero, master, wait, send } = setup();
+  Object.assign(master, hero.toJSON(), { id: 'master', role: 'MASTER' }); state.players.set(master.id, master);
+  state.monsters.clear();
+  for (const id of ['goblin-a', 'goblin-b']) state.monsters.set(id, Object.assign(new MonsterSchema(), { id, name: 'Goblin', currentChamberId: 'training-1' }));
+  hero.characterName = 'Ael'; combat.start({ chamberId: 'training-1' });
+  const roster = combat.snapshot().participants;
+  expect(roster.map(p => p.name)).toEqual(['Ael', 'Goblin 1', 'Goblin 2']);
+  expect(roster.filter(p => p.kind === 'MONSTER').map(p => p.catalogName)).toEqual(['Goblin', 'Goblin']);
+  expect(() => combat.action(master, { type: 'ATTACK', subType: 'THRUST', targetId: 'goblin-a', turnToken: state.combatState.turnToken }, true)).toThrow('turno');
+  combat.skip(); wait();
+  const actorId = state.combatState.activeParticipantId;
+  expect(() => combat.action(hero, { type: 'ATTACK', subType: 'THRUST', targetId: hero.id, turnToken: state.combatState.turnToken })).toThrow('turno');
+  expect(() => combat.action(master, { type: 'ATTACK', subType: 'FIRE', targetId: hero.id, turnToken: state.combatState.turnToken }, true)).toThrow('criatura');
+  combat.action(master, { type: 'ATTACK', subType: 'THRUST', targetId: hero.id, turnToken: state.combatState.turnToken }, true);
+  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ actorId, actorKind: 'MONSTER', actorName: roster.find(p => p.id === actorId)!.name,
+    targetName: 'Ael', targetKind: 'PLAYER', targets: [expect.objectContaining({ targetId: hero.id, targetName: 'Ael', damage: expect.any(Number) })] }), 'training-1');
+});
+it('attributes self defense to the actor even if a different ally was supplied', () => {
+  const { combat, hero, state, send } = setup(); combat.start({ chamberId: 'training-1' });
+  combat.action(hero, { type: 'DEFEND', subType: 'ACTIVE_DODGE', targetId: 'training-1:monster', turnToken: state.combatState.turnToken });
+  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ targetId: hero.id, targetKind: 'PLAYER', outcome: 'ACTIVE_DODGE' }), 'training-1');
+});
+it('uses persisted Defense to miss authoritatively, consumes the action and records zero damage', () => {
+  const { combat, hero, master, state, database, send, wait } = setup();
+  database.db.update(characters).set({ defense: 100 }).where(eq(characters.id, hero.characterId)).run();
+  combat.start({ chamberId: 'training-1' }); combat.skip(); wait();
+  expect(combat.snapshot().participants.find(p => p.id === hero.id)?.defense).toBe(100);
+  combat.action(master, { type: 'ATTACK', subType: 'SLASHING', targetId: hero.id, turnToken: state.combatState.turnToken }, true);
+  expect(hero.hp).toBe(100);
+  expect(state.combatState.activeParticipantId).toBe(hero.id);
+  expect(send).toHaveBeenCalledWith('COMBAT_EVENT', expect.objectContaining({ outcome: 'MISSED_DEFENSE', damage: 0, targets: [expect.objectContaining({ damage: 0 })] }), 'training-1');
+});
+it('restores old phase-4 participant JSON with Defense and manual defaults', () => {
+  const { combat, hero, state, database, room } = setup(); combat.start({ chamberId: 'training-1' });
+  database.sqlite.exec("UPDATE combat_participants SET stats_json = json_remove(stats_json, '$.defense', '$.isAutoMode', '$.allowAutoFlee')");
+  const restored = new RoomState(); loadBoard(restored, readBoard(database)); restored.players.set(hero.id, hero);
+  const handler = new CombatHandler(restored, database, room.id, () => {}, () => {}); handler.restore();
+  expect(handler.snapshot().participants).toEqual(combat.snapshot().participants);
+  expect(restored.combatState.turnToken).toBe(state.combatState.turnToken);
 });

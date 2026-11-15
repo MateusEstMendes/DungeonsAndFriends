@@ -40,7 +40,7 @@ function attach(room: Room<unknown, RoomState>) {
     useBoardStore.setState({ chambers: [...state.chambers.values()].map(c => c.toJSON()), monsters: [...state.monsters.values()].map(m => m.toJSON()), objects: [...state.objects.values()].map(o => o.toJSON()), activeStageId: state.activeStageId, explorationMode: state.explorationMode });
     const combat = state.combatState ? state.combatState.toJSON() as CombatSnapshot : emptyCombat;
     const previous = useCombatStore.getState().combat;
-    useCombatStore.setState({ combat, ...(previous.turnToken !== combat.turnToken ? { pending: false } : {}), ...(!combat.active ? { manualMonsterId: '' } : {}) });
+    useCombatStore.setState({ combat, ...(previous.turnToken !== combat.turnToken ? { pending: false } : {}), ...(!combat.active ? { selectedMonsterId: '' } : {}) });
   };
   room.onStateChange(sync);
   room.onMessage('CLOCK_SYNC', (data: { clientSentAt: number; serverNow: number }) => {

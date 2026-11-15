@@ -7,4 +7,6 @@ export class MonsterSchema extends Schema {
   @view() @type("number") r = 0;
   @view() @type("string") tokenUrl = "";
   @view() @type("boolean") isHiddenByMaster = false;
+  @view() @type("boolean") isAutoMode = false;
+  @view() @type("boolean") allowAutoFlee = false;
 }

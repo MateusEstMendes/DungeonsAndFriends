@@ -13,6 +13,8 @@ import { MovementHandler } from "./handlers/movement.js";
 import { MasterHandler } from "./handlers/master.js";
 import { CombatHandler } from './handlers/combat.js';
 
+import { grantStarterKit } from "../db/seedEconomy.js";
+
 type Database = ReturnType<typeof openDatabase>;
 export interface RoomServices { database: Database; tokenSecret: string; bootstrapKey: string }
 interface Identity { playerId: string; name: string; role: PlayerRole; sessionToken: string }
@@ -233,7 +235,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
         }
         const created = db.insert(characters).values({ ...values, playerId: player.id, roomId: this.roomRecord.id }).returning().get();
         db.update(players).set({ characterId: created.id, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
-        return created;
+        return grantStarterKit(this.services.database.db, created.id);
       });
       this.syncCharacter(player, character);
       this.movement.spawn(player);

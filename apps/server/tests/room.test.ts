@@ -144,6 +144,11 @@ describe.sequential("sala autoritativa", () => {
     await until(() => player.status === "READY" && client.state.players.get(saved.id)?.status === "READY" && master.state.players.get(saved.id)?.status === "READY");
     const character = database.db.select().from(characters).get()!;
     expect(character).toMatchObject({ playerId: saved.id, name: "Ael", raceId: "ELF", archetypeId: "MAGE", baseDex: 15, finalDex: 17, finalCon: 13, finalInt: 16, hp: 110, maxHp: 110, mp: 32, maxMp: 32, defense: 13, dodgeChance: 16, speed: 3, flatDr: 0 });
+    expect(character).toMatchObject({ gold: 50, starterKitGranted: true, baseFinalDex: 17 });
+    expect(database.sqlite.prepare('SELECT item_id, slot, quantity FROM inventories WHERE character_id = ? ORDER BY slot').all(character.id)).toEqual([
+      { item_id: 'HEALTH_POTION', slot: 'BAG', quantity: 2 }, { item_id: 'ARCANE_STAFF', slot: 'MAIN_HAND', quantity: 1 },
+    ]);
+    expect(database.sqlite.prepare('SELECT spell_id FROM character_grimoire WHERE character_id = ? ORDER BY spell_id').all(character.id)).toEqual([{ spell_id: 'ARCANE_DART' }, { spell_id: 'FREEZING_RAY' }]);
     expect(player.characterId).toBe(character.id);
     expect(player.tokenUrl).toBe(`data:image/webp;base64,${character.tokenWebp}`);
     expect(client.state.players.get(saved.id)?.characterName).toBe("Ael");

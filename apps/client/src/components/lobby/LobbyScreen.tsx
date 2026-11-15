@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from "@df/shared";
 import { useEffect, useState, type FormEvent } from "react";
 import { joinMaster, joinPlayer, reconnectSaved, savedSession, leaveRoom } from "../../network/colyseusClient";
 import { useGameStore } from "../../store/useGameStore";
@@ -29,6 +30,6 @@ export function LobbyScreen() {
       <label>Senha do Mestre<input type="password" required maxLength={256} value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password"/></label>
       <button disabled={busy || !(code || hostCode)}>{busy ? "Conectando…" : "Entrar como Mestre"}</button>
     </form></details>
-    <small className="muted">v0.4.0 · Sem cadastro</small>
+    <small className="muted">v{PROTOCOL_VERSION} · Sem cadastro</small>
   </section>;
 }

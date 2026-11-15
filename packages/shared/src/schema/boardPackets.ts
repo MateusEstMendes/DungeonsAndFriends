@@ -10,7 +10,7 @@ const base = { chamberId: z.string().min(1).max(100), ...position };
 export const MasterEditSchema = z.discriminatedUnion("layer", [
   z.strictObject({ ...base, layer: z.literal("TERRAIN"), terrain: z.enum(TERRAIN_TYPES) }),
   z.strictObject({ ...base, layer: z.literal("WALL"), direction: z.number().int().min(0).max(5), erase: z.boolean() }),
-  z.strictObject({ ...base, layer: z.literal("OBJECT"), kind: z.enum(["CHEST", "TABLE", "CHAIR", "DOOR", "TORCH"]), rotation: z.number().int().min(0).max(359), hidden: z.boolean() }),
+  z.strictObject({ ...base, layer: z.literal("OBJECT"), kind: z.enum(["CHEST", "TABLE", "CHAIR", "DOOR", "TORCH", "NPC_MERCHANT"]), rotation: z.number().int().min(0).max(359), hidden: z.boolean() }),
   z.strictObject({ ...base, layer: z.literal("ENTITY"), name: z.string().trim().min(1).max(60), hidden: z.boolean() }),
 ]);
 export const EntityHiddenSchema = z.strictObject({ entityId: z.string().min(1).max(100), hidden: z.boolean() });

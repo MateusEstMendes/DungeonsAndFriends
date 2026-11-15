@@ -18,6 +18,7 @@ export class CombatStateSchema extends Schema {
   @type('string') activeParticipantId = '';
   @type('number') remainingActions = 0;
   @type('string') fleeMode: 'NORMAL' | 'BLOCKED' | 'GUARANTEED_100' = 'NORMAL';
+  @type('boolean') globalAiEnabled = false;
   @type('boolean') isPaused = false;
 }
 

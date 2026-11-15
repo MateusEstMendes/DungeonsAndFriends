@@ -66,7 +66,7 @@ export class MasterHandler {
         if (!this.movement.isWalkable(chamber.id, data)) throw new Error("Pinte o chão antes de colocar objetos ou entidades.");
         if (data.layer === "ENTITY" && this.movement.occupied(chamber.id, data)) throw new Error("Destino ocupado.");
         board.objects.push({ id: randomUUID(), chamberId: chamber.id, kind: data.layer === "ENTITY" ? "MONSTER" : data.kind,
-          name: data.layer === "ENTITY" ? data.name : ({ CHEST: "Baú", TABLE: "Mesa", CHAIR: "Cadeira", DOOR: "Porta", TORCH: "Tocha" }[data.kind]),
+          name: data.layer === "ENTITY" ? data.name : ({ CHEST: "Baú", TABLE: "Mesa", CHAIR: "Cadeira", DOOR: "Porta", TORCH: "Tocha", NPC_MERCHANT: "Mercador" }[data.kind]),
           q: data.q, r: data.r, rotation: data.layer === "OBJECT" ? data.rotation : 0, hidden: data.hidden });
       }
     });

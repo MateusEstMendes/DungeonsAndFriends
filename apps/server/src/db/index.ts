@@ -9,6 +9,8 @@ import * as schema from "./schema.js";
 import { seedMaps } from "./seedMaps.js";
 import { seedMonsters } from "./seedMonsters.js";
 
+import { seedEconomy } from "./seedEconomy.js";
+
 const foundationVersion = "0.1.0";
 
 export function openDatabase(filename = databasePath()) {
@@ -33,6 +35,7 @@ export function openDatabase(filename = databasePath()) {
     migrate(db, { migrationsFolder });
     seedMonsters(db);
     seedMaps(db);
+    seedEconomy(db);
     db.insert(schema.dungeonsMigrations).values({
       version: foundationVersion, appliedAt: Date.now(), checksum,
     }).onConflictDoNothing().run();

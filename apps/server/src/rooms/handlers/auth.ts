@@ -64,6 +64,7 @@ export function prepareCharacter(input: unknown) {
     baseStr: base.str, baseDex: base.dex, baseCon: base.con, baseInt: base.int, baseWis: base.wis, baseCha: base.cha,
     finalStr: final.str, finalDex: final.dex, finalCon: final.con, finalInt: final.int, finalWis: final.wis, finalCha: final.cha,
     hp: maxHp, maxHp, mp: maxMp, maxMp,
+    humanBonusAttribute: payload.humanBonusAttribute ?? null, baseFinalDex: final.dex,
     defense: calculateBaseDefense(dexMod, payload.raceId),
     dodgeChance: calculatePassiveDodge(dexMod, payload.raceId),
     speed: calculateSpeed(dexMod), flatDr: calculateFlatDR(payload.raceId),

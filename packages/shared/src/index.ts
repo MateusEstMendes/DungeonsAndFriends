@@ -14,3 +14,9 @@ export * from "./schema/ChamberSchema.js";
 export * from "./schema/MonsterSchema.js";
 export * from "./schema/PlacedObjectSchema.js";
 export * from "./schema/boardPackets.js";
+
+export * from "./combat/events.js";
+export * from "./rules/items.js";
+export * from "./rules/spells.js";
+export * from "./schema/economyPackets.js";
+export * from "./combat/dice.js";

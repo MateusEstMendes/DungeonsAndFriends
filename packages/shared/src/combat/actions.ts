@@ -1,9 +1,12 @@
-export const ACTION_TYPES = ['ATTACK', 'DEFEND', 'ITEM', 'FLEE'] as const;
+import type { SpellId } from '../rules/spells.js';
+
+export const ACTION_TYPES = ['ATTACK', 'SPELL', 'DEFEND', 'ITEM', 'FLEE'] as const;
 export const PHYSICAL_ATTACKS = ['SLASHING', 'BLUNT', 'THRUST', 'UNARMED', 'WARRIOR', 'BARBARIAN', 'ROGUE'] as const;
 export const MAGICAL_ATTACKS = ['FIRE', 'ICE', 'LIGHT', 'DARKNESS', 'ARCANE'] as const;
 export type AttackType = typeof PHYSICAL_ATTACKS[number] | typeof MAGICAL_ATTACKS[number];
 export type CombatAction =
-  | { type: 'ATTACK'; subType: AttackType; targetId: string }
+  | { type: 'ATTACK'; subType: AttackType; targetId: string; hand?: 'MAIN' | 'OFF' }
+  | { type: 'SPELL'; spellId: SpellId; targetId: string }
   | { type: 'DEFEND'; subType: 'ACTIVE_DODGE' | 'SHIELD_BLOCK' | 'HEAL' | 'PROTECT'; targetId?: string }
   | { type: 'ITEM'; itemId: string; targetId: string }
   | { type: 'FLEE' };
@@ -18,7 +21,7 @@ export function validateAction(action: CombatAction, actionIndex: number, str: n
   if (!Number.isInteger(actionIndex) || actionIndex < 0 || actionIndex >= budget.count) return false;
   if (actionIndex === 0) return true;
   if (action.type === 'FLEE' || action.type === 'ITEM') return false;
-  const magical = action.type === 'ATTACK' ? isMagicAttack(action.subType) : action.subType === 'HEAL' || action.subType === 'PROTECT';
+  const magical = action.type === 'SPELL' || (action.type === 'ATTACK' ? isMagicAttack(action.subType) : action.subType === 'HEAL' || action.subType === 'PROTECT');
   return magical === (budget.extraType === 'MAGICAL_ONLY');
 }
 export function resolveFlee(speed: number, enemySpeeds: readonly number[], roll: number, flags: { fleeBlocked: boolean; guaranteedFlee: boolean }): boolean {

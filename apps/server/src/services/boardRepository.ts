@@ -1,10 +1,12 @@
+import { eq } from "drizzle-orm";
+import { seedObjectEconomy } from "../db/seedEconomy.js";
 import { ChamberSchema, MonsterSchema, PlacedObjectSchema, PortalSchema, getHexKey, getMonsterDefinition, type RoomState, type Terrain } from "@df/shared";
 import type { openDatabase } from "../db/index.js";
 import { chambers, placedObjects, terrainCells, walls } from "../db/schema.js";
 export type Database = ReturnType<typeof openDatabase>;
 export function readBoard(database: Database) {
   const { db } = database;
-  return { chambers: db.select().from(chambers).all(), cells: db.select().from(terrainCells).all(), walls: db.select().from(walls).all(), objects: db.select().from(placedObjects).all() };
+  return { chambers: db.select().from(chambers).all(), cells: db.select().from(terrainCells).all(), walls: db.select().from(walls).all(), objects: db.select().from(placedObjects).where(eq(placedObjects.isArchived, false)).all().map(({ isArchived: _archived, ...object }) => object) };
 }
 export type BoardSnapshot = ReturnType<typeof readBoard>;
 export function loadBoard(state: RoomState, data: BoardSnapshot) {
@@ -31,9 +33,17 @@ export function loadBoard(state: RoomState, data: BoardSnapshot) {
 /** Runs inside the caller's transaction together with its history record. */
 export function writeBoard(database: Database, data: BoardSnapshot) {
   const { db } = database;
-  db.delete(placedObjects).run(); db.delete(walls).run(); db.delete(terrainCells).run(); db.delete(chambers).run();
-  for (const row of data.chambers) db.insert(chambers).values(row).run();
-  for (const row of data.cells) db.insert(terrainCells).values(row).run();
-  for (const row of data.walls) db.insert(walls).values(row).run();
-  for (const row of data.objects) db.insert(placedObjects).values(row).run();
+  // Object identities survive removal/Undo so depleted loot is never regenerated.
+  // Chamber deletion has no editor command; reject it rather than orphan archived objects.
+  if (db.select().from(chambers).all().some(c => !data.chambers.some(next => next.id === c.id))) throw new Error("Remoção de câmaras não suportada pelo histórico.");
+  db.transaction(tx => {
+    for (const row of data.chambers) tx.insert(chambers).values(row).onConflictDoUpdate({ target: chambers.id, set: row }).run();
+    tx.delete(walls).run(); tx.delete(terrainCells).run();
+    for (const row of data.cells) tx.insert(terrainCells).values(row).run();
+    for (const row of data.walls) tx.insert(walls).values(row).run();
+    tx.update(placedObjects).set({ isArchived: true }).run();
+    for (const row of data.objects) tx.insert(placedObjects).values({ ...row, isArchived: false })
+      .onConflictDoUpdate({ target: placedObjects.id, set: { ...row, isArchived: false } }).run();
+    seedObjectEconomy(tx);
+  });
 }

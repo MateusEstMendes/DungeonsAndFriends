@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { calculateTotalActions, getModifier, getMonsterDefinition, hexDistance, isCharacterPresent, isMagicAttack, resolveAttack, resolveFlee, validateAction,
-  PHYSICAL_ATTACKS, MAGICAL_ATTACKS, type AttackType, type CombatAction, type CombatantStats, type PlayerSchema, type RoomState } from '@df/shared';
+import { canUseMonsterAction, calculateTotalActions, getModifier, getMonsterDefinition, hexDistance, isCharacterPresent, isMagicAttack, resolveAttack, resolveFlee, validateAction,
+  PHYSICAL_ATTACKS, MAGICAL_ATTACKS, type AttackType, type CombatAction, type CombatantStats, type CombatEvent, type PlayerSchema, type RoomState } from '@df/shared';
 import { activeBuffs, characters, combatEncounters, combatParticipants, monstersCatalog } from '../../db/schema.js';
 import type { Database } from '../../services/boardRepository.js';
 import { DEFAULT_CUTOFFS, evaluateD20, roll, validateCutoffs, type D20Cutoffs } from '../../services/diceService.js';
 
 interface Participant extends CombatantStats {
-  id: string; kind: 'PLAYER' | 'MONSTER'; name: string; str: number; int: number; dex: number;
+  id: string; kind: 'PLAYER' | 'MONSTER'; name: string; catalogName?: string; str: number; int: number; dex: number;
   speed: number; mp: number; maxMp: number; archetypeId: string; attackType: AttackType; baseDamage: number;
-  cooldowns: Record<string, number>; potions: number;
+  cooldowns: Record<string, number>; potions: number; isAutoMode: boolean; allowAutoFlee: boolean;
   berserkUntilRound?: number;
   absent?: boolean;
 }
@@ -39,13 +39,13 @@ export class CombatHandler {
     if (typeof chamberId !== 'string' || !this.state.chambers.has(chamberId) || this.state.combatState.active) throw new Error('Encontro indisponível.');
     const roster = new Map<string, Participant>();
     for (const player of this.state.players.values()) {
-      if (!isCharacterPresent(player) || player.currentChamberId !== chamberId || player.hp <= 0) continue;
+      if (player.role !== 'PLAYER' || !isCharacterPresent(player) || player.currentChamberId !== chamberId || player.hp <= 0) continue;
       const row = this.database.db.select().from(characters).where(eq(characters.id, player.characterId)).get();
       if (!row) continue;
       roster.set(player.id, { id: player.id, kind: 'PLAYER', name: player.characterName, hp: row.hp, maxHp: row.maxHp, mp: row.mp, maxMp: row.maxMp,
         str: row.finalStr, dex: row.finalDex, int: row.finalInt, dexMod: getModifier(row.finalDex), speed: row.speed,
-        raceId: row.raceId, archetypeId: row.archetypeId, passiveDodge: row.dodgeChance, flatDR: row.flatDr,
-        baseDamage: 6, attackType: 'SLASHING', cooldowns: {}, potions: 2 });
+        raceId: row.raceId, archetypeId: row.archetypeId, defense: row.defense, passiveDodge: row.dodgeChance, flatDR: row.flatDr,
+        baseDamage: 6, attackType: 'SLASHING', cooldowns: {}, potions: 2, isAutoMode: false, allowAutoFlee: false });
     }
     const catalog = this.database.db.select().from(monstersCatalog).all();
     for (const monster of this.state.monsters.values()) {
@@ -53,9 +53,16 @@ export class CombatHandler {
       const definition = getMonsterDefinition(monster.name);
       const row = catalog.find(c => c.name === monster.name || c.id === monster.name || c.id === definition?.id);
       if (!row) throw new Error(`Monstro sem ficha no catálogo: ${monster.name}`);
-      roster.set(monster.id, { id: monster.id, name: row.name, kind: 'MONSTER', hp: row.hp, maxHp: row.hp, mp: row.mp, maxMp: row.mp,
+      roster.set(monster.id, { id: monster.id, name: row.name, catalogName: row.name, kind: 'MONSTER', hp: row.hp, maxHp: row.hp, mp: row.mp, maxMp: row.mp,
         str: row.str, int: row.int, dex: row.dex, dexMod: getModifier(row.dex), speed: row.speed, flatDR: row.flatDr,
-        passiveDodge: row.passiveDodge, archetypeId: '', baseDamage: row.baseDamage, attackType: row.attackType as AttackType, cooldowns: {}, potions: 0 });
+        defense: 10 + getModifier(row.dex), passiveDodge: row.passiveDodge, archetypeId: '', baseDamage: row.baseDamage, attackType: row.attackType as AttackType, cooldowns: {}, potions: 0, isAutoMode: monster.isAutoMode, allowAutoFlee: monster.allowAutoFlee });
+    }
+    const monsters = [...roster.values()].filter(p => p.kind === 'MONSTER');
+    const counts = new Map<string, number>();
+    for (const monster of monsters) {
+      if (monsters.filter(p => p.catalogName === monster.catalogName).length < 2) continue;
+      const index = (counts.get(monster.catalogName!) ?? 0) + 1;
+      counts.set(monster.catalogName!, index); monster.name = `${monster.catalogName} ${index}`;
     }
     if (![...roster.values()].some(p => p.kind === 'PLAYER') || ![...roster.values()].some(p => p.kind === 'MONSTER')) throw new Error('São necessários heróis e monstros vivos na câmara.');
     const before = this.checkpoint();
@@ -79,14 +86,17 @@ export class CombatHandler {
     const actor = this.participants.get(c.activeParticipantId)!;
     if (manual ? player.role !== 'MASTER' || actor.kind !== 'MONSTER' : actor.id !== player.id || actor.kind !== 'PLAYER') throw new Error('Não é seu turno.');
     const action = this.parseAction(data);
+    if (actor.kind === 'MONSTER' && !canUseMonsterAction(actor.attackType, action)) throw new Error('Ação indisponível para esta criatura.');
     if (!validateAction(action, c.actionIndex, actor.str, actor.int)) throw new Error('Ação extra incompatível com FOR/INT.');
-    const target = 'targetId' in action && action.targetId ? this.participants.get(action.targetId) : actor;
+    const selfDefense = action.type === 'DEFEND' && (action.subType === 'ACTIVE_DODGE' || action.subType === 'SHIELD_BLOCK');
+    const target = !selfDefense && 'targetId' in action && action.targetId ? this.participants.get(action.targetId) : actor;
     if (!target || target.absent || target.hp <= 0) throw new Error('Alvo inválido.');
     if (action.type === 'ATTACK' && target.kind === actor.kind) throw new Error('Selecione um inimigo.');
     if ((action.type === 'ITEM' || action.type === 'DEFEND') && target.kind !== actor.kind) throw new Error('Selecione um aliado.');
     if (action.type === 'FLEE' && c.fleeMode === 'BLOCKED') throw new Error('A fuga está bloqueada pelo Mestre.');
     const before = this.checkpoint();
-    const event: Record<string, unknown> = { id: randomUUID(), encounterId: c.encounterId, actorId: actor.id, targetId: target.id,
+    const event: CombatEvent = { id: randomUUID(), encounterId: c.encounterId, actorId: actor.id, targetId: target.id,
+      actorName: actor.name, actorKind: actor.kind, targetName: target.name, targetKind: target.kind, targets: [],
       type: action.type, round: c.round, turnToken: c.turnToken, startedAt: this.now(), duration: 1200, rolls: [] };
     c.isProcessingAction = true;
     try {
@@ -125,7 +135,7 @@ export class CombatHandler {
       } else if (action.type === 'ITEM') {
         if (action.itemId !== 'HEALTH_POTION' || actor.potions <= 0) throw new Error('Consumível indisponível.');
         const heal = Math.min(25, target.maxHp - target.hp); actor.potions--; target.hp += heal; Object.assign(event, { healAmount: heal, outcome: 'HEALED' });
-      } else {
+      } else if (action.type === 'FLEE') {
         const value = dice(100);
         const fled = resolveFlee(actor.speed, [...this.participants.values()].filter(p => !p.absent && p.kind !== actor.kind && p.hp > 0).map(p => p.speed), value,
           { fleeBlocked: c.fleeMode === 'BLOCKED', guaranteedFlee: c.fleeMode === 'GUARANTEED_100' });
@@ -138,6 +148,8 @@ export class CombatHandler {
         else if (c.remainingActions === 0 || actor.hp === 0) this.advance();
         else c.turnToken = randomUUID();
       }
+      event.targets = [{ targetId: target.id, targetName: target.name, targetKind: target.kind,
+        outcome: event.outcome, damage: event.damage ?? 0, drAbsorbed: event.drAbsorbed ?? 0, healAmount: event.healAmount ?? 0 }];
       this.unlockAt = this.now() + 1200;
       this.persist();
     } catch (error) { this.rollback(before); throw error; }
@@ -178,7 +190,7 @@ export class CombatHandler {
     const id = this.object(input).targetPlayerId;
     const player = typeof id === 'string' ? this.state.players.get(id) : undefined;
     const c = this.state.combatState;
-    if (!player || !player.connected || !isCharacterPresent(player) || player.currentChamberId !== c.chamberId || player.hp <= 0 || c.turnOrder.includes(player.id)) throw new Error('Personagem indisponível para este combate.');
+    if (!player || player.role !== 'PLAYER' || !player.connected || !isCharacterPresent(player) || player.currentChamberId !== c.chamberId || player.hp <= 0 || c.turnOrder.includes(player.id)) throw new Error('Personagem indisponível para este combate.');
     const row = this.database.db.select().from(characters).where(eq(characters.id, player.characterId)).get();
     if (!row) throw new Error('Ficha indisponível.');
     this.change(() => {
@@ -186,8 +198,8 @@ export class CombatHandler {
       this.participants.set(player.id, previous ? { ...previous, absent: false, hp: row.hp, mp: row.mp } : {
         id: player.id, kind: 'PLAYER', name: player.characterName, hp: row.hp, maxHp: row.maxHp, mp: row.mp, maxMp: row.maxMp,
         str: row.finalStr, dex: row.finalDex, int: row.finalInt, dexMod: getModifier(row.finalDex), speed: row.speed,
-        raceId: row.raceId, archetypeId: row.archetypeId, passiveDodge: row.dodgeChance, flatDR: row.flatDr,
-        baseDamage: 6, attackType: 'SLASHING', cooldowns: {}, potions: 2,
+        raceId: row.raceId, archetypeId: row.archetypeId, defense: row.defense, passiveDodge: row.dodgeChance, flatDR: row.flatDr,
+        baseDamage: 6, attackType: 'SLASHING', cooldowns: {}, potions: 2, isAutoMode: false, allowAutoFlee: false,
       });
       c.turnOrder.push(player.id);
     });
@@ -236,7 +248,7 @@ export class CombatHandler {
   private persist(create = false) {
     const c = this.state.combatState;
     const values = { status: this.encounterStatus, roomId: this.roomId, chamberId: c.chamberId, biome: c.biome, round: c.round, turnOrderJson: JSON.stringify([...c.turnOrder]), activeParticipantId: c.activeParticipantId,
-      remainingActions: c.remainingActions, actionIndex: c.actionIndex, fleeMode: c.fleeMode, isPaused: c.isPaused, turnToken: c.turnToken, cutoffsJson: JSON.stringify(this.cutoffs), updatedAt: this.now() };
+      remainingActions: c.remainingActions, actionIndex: c.actionIndex, fleeMode: c.fleeMode, isPaused: c.isPaused, globalAiEnabled: c.globalAiEnabled, turnToken: c.turnToken, cutoffsJson: JSON.stringify(this.cutoffs), updatedAt: this.now() };
     this.database.db.transaction(db => {
       if (create) db.insert(combatEncounters).values({ id: c.encounterId, ...values }).run();
       else db.update(combatEncounters).set(values).where(eq(combatEncounters.id, c.encounterId)).run();
@@ -255,6 +267,14 @@ export class CombatHandler {
     if (!row) return;
     this.participants.clear();
     for (const p of this.database.db.select().from(combatParticipants).where(eq(combatParticipants.encounterId, row.id)).all()) this.participants.set(p.id, { ...JSON.parse(p.statsJson), hp: p.hp, mp: p.mp });
+    for (const p of this.participants.values()) {
+      p.isAutoMode ??= false; p.allowAutoFlee ??= false;
+      if (p.defense === undefined) {
+        const player = this.state.players.get(p.id);
+        const row = player ? this.database.db.select().from(characters).where(eq(characters.id, player.characterId)).get() : undefined;
+        p.defense = row?.defense ?? 10 + p.dexMod;
+      }
+    }
     const order: string[] = JSON.parse(row.turnOrderJson), cutoffs: D20Cutoffs = JSON.parse(row.cutoffsJson);
     validateCutoffs(cutoffs);
     const actor = this.participants.get(row.activeParticipantId);
@@ -263,7 +283,7 @@ export class CombatHandler {
       || row.remainingActions + row.actionIndex !== calculateTotalActions(actor.str, actor.int).count) throw new Error('Encontro persistido inconsistente.');
     const c = this.state.combatState;
     Object.assign(c, { active: true, encounterId: row.id, chamberId: row.chamberId, biome: row.biome, round: row.round, activeParticipantId: row.activeParticipantId,
-      remainingActions: row.remainingActions, actionIndex: row.actionIndex, fleeMode: row.fleeMode, isPaused: row.isPaused, turnToken: row.turnToken });
+      remainingActions: row.remainingActions, actionIndex: row.actionIndex, fleeMode: row.fleeMode, isPaused: row.isPaused, globalAiEnabled: row.globalAiEnabled, turnToken: row.turnToken });
     c.turnOrder.splice(0, c.turnOrder.length, ...order); this.cutoffs = cutoffs;
     this.encounterStatus = 'ACTIVE'; this.unlockAt = 0; c.isProcessingAction = false;
     this.state.sessionStatus = 'IN_COMBAT'; this.syncVitals();

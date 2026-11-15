@@ -1,7 +1,7 @@
 import { Assets, Container, Graphics, Sprite, Text, type Application, type Texture } from 'pixi.js';
 import { getMonsterDefinition } from '@df/shared';
 import { gsap } from 'gsap';
-import { useCombatStore } from '../../store/useCombatStore';
+import { selectMonster, useCombatStore } from '../../store/useCombatStore';
 import { useGameStore } from '../../store/useGameStore';
 import { BoardMotion } from '../motion';
 import { drawBiome, monsterArt } from './combatArt';
@@ -50,16 +50,17 @@ export class CombatPOVScene {
     monsters.forEach((monster, index) => {
       let plate = this.plates.get(monster.id);
       if (!plate) {
-        const root = new Container(), art = monsterArt(monster.name), texture = this.app.renderer.generateTexture(art); art.destroy();
+        const root = new Container(), art = monsterArt(monster.catalogName ?? monster.name), texture = this.app.renderer.generateTexture(art); art.destroy();
         const sprite = new Sprite(texture); sprite.anchor.set(.5, 1);
         const hp = new Graphics(), reticle = new Graphics();
         const label = new Text({ text: '', style: { fontFamily: 'Georgia', fontSize: 14, fill: 0xf4e3bf, align: 'center', stroke: { color: 0x100c18, width: 3 } } }); label.anchor.set(.5);
         root.addChild(sprite, reticle, hp, label); this.actors.addChild(root);
         root.eventMode = 'static'; root.cursor = 'pointer'; root.on('pointertap', () => {
-          useCombatStore.setState({ targetId: monster.id, ...(useGameStore.getState().role === 'MASTER' ? { manualMonsterId: monster.id } : {}) });
+          if (useGameStore.getState().role === 'MASTER') selectMonster(monster.id);
+          else useCombatStore.setState({ targetId: monster.id });
         });
         plate = { root, sprite, hp, reticle, label, texture, ownsTexture: true }; this.plates.set(monster.id, plate);
-        const definition = getMonsterDefinition(monster.name);
+        const definition = getMonsterDefinition(monster.catalogName ?? monster.name);
         if (definition) void this.loadMonsterImage(monster.id, plate, definition.imageUrl);
       }
       const maxScale = Math.min(w < 700 ? 1.2 : 1.5, h / 470);
@@ -71,7 +72,8 @@ export class CombatPOVScene {
       plate.label.position.set(0, -255);
       plate.hp.clear().roundRect(-48,-229,96,6,3).fill(0x24202d).roundRect(-48,-229,96 * Math.max(0, monster.hp / monster.maxHp),6,3).fill(monster.hp / monster.maxHp < .3 ? 0xd66b52 : 0x83ac80);
       plate.reticle.clear();
-      if (targetId === monster.id || useCombatStore.getState().manualMonsterId === monster.id) {
+      if (combat.activeParticipantId === monster.id) plate.reticle.ellipse(0, 8, 65, 12).stroke({ color: 0x83ac80, width: 3 });
+      if (targetId === monster.id || useCombatStore.getState().selectedMonsterId === monster.id) {
         plate.reticle.circle(0,-115,65).stroke({ color: 0xe8c477, width: 2, alpha: .8 });
         for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; plate.reticle.moveTo(Math.cos(a) * 55, -115 + Math.sin(a) * 55).lineTo(Math.cos(a) * 78, -115 + Math.sin(a) * 78).stroke({ color: 0xffe3a1, width: 3 }); }
       }
@@ -83,11 +85,13 @@ export class CombatPOVScene {
       if (document.hidden) continue;
       const elapsed = Math.max(0, (Date.now() + useCombatStore.getState().serverClockOffset - event.startedAt) / 1000);
       if (elapsed > 3) continue;
+      // Hero impacts belong to their DOM cards; never draw them over an unrelated monster.
+      if (event.targetKind === 'PLAYER') { diceAnimation(this.dice, event.rolls, this.effectsMotion, elapsed); continue; }
       const plate = this.plates.get(event.targetId), point = plate ? { x: plate.root.x, y: plate.root.y - 100 * plate.root.scale.y } : { x: w / 2, y: h * .73 };
       diceAnimation(this.dice, event.rolls, this.effectsMotion, elapsed);
       this.effectsMotion.run(() => {
         gsap.delayedCall(this.effectsMotion.reduced ? 0 : Math.max(0, .55 - elapsed), () => {
-          if (event.vfxType && !event.outcome?.startsWith('DODGED')) combatEffects(this.effects, event.vfxType, point.x, point.y, this.effectsMotion);
+          if (event.vfxType && (event.damage ?? 0) > 0) combatEffects(this.effects, event.vfxType, point.x, point.y, this.effectsMotion);
           floatingText(this.effects, this.root, event, point.x, point.y - 30, this.effectsMotion, plate?.sprite);
         });
       });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { calculateTotalActions, resolveFlee, validateAction } from './actions.js';
 import { resolveAttack, type AttackInput, type CombatantStats } from './damage.js';
 
-const stats: CombatantStats = { hp: 100, maxHp: 100, dexMod: 3, passiveDodge: 0, flatDR: 0 };
+const stats: CombatantStats = { hp: 100, maxHp: 100, defense: 13, dexMod: 3, passiveDodge: 0, flatDR: 0 };
 const attack: AttackInput = { attacker: stats, defender: stats, attackRoll: 15, naturalRoll: 12, baseDamage: 4, isMagic: false, isMelee: true };
 describe('combat formulas', () => {
   it('keeps damage at one after flat mitigation', () => {
@@ -40,5 +40,32 @@ describe('combat formulas', () => {
     expect(resolveFlee(10, [1], 1, { fleeBlocked: true, guaranteedFlee: true })).toBe(false);
     expect(resolveFlee(1, [10], 100, { fleeBlocked: false, guaranteedFlee: true })).toBe(true);
     expect(resolveFlee(3, [3, 3], 50, { fleeBlocked: false, guaranteedFlee: false })).toBe(true);
+  });
+});
+
+describe('phase 5 defense, buffs and spells', () => {
+  it('misses below Defense without rolling dodge or applying minimum damage/DR/lifesteal', () => {
+    const rolls: number[] = [];
+    const result = resolveAttack({ ...attack, attacker: { ...stats, raceId: 'VAMPIRE' }, defender: { ...stats, defense: 16, flatDR: 99, stance: 'ACTIVE_DODGE', passiveDodge: 20 } }, faces => { rolls.push(faces); return 20; });
+    expect(result).toMatchObject({ outcome: 'MISSED_DEFENSE', finalDamage: 0, rawDamage: 0, drAbsorbed: 0, healAmount: 0 });
+    expect(rolls).toEqual([]);
+    expect(resolveAttack({ ...attack, defender: { ...stats, defense: 15 } }, () => 100).outcome).toBe('HIT');
+  });
+  it('lets a natural critical bypass Defense while still allowing dodge', () => {
+    expect(resolveAttack({ ...attack, naturalRoll: 19, criticalFrom: 19, defender: { ...stats, defense: 100 } }, () => 100)).toMatchObject({ outcome: 'CRITICAL', finalDamage: 8 });
+    expect(resolveAttack({ ...attack, naturalRoll: 20, defender: { ...stats, defense: 100, passiveDodge: 20 } }, () => 1).outcome).toBe('DODGED_PASSIVE');
+  });
+  it('floors juice physical damage before critical and DR, and limits the book to magic', () => {
+    expect(resolveAttack({ ...attack, baseDamage: 9, physicalDamageMultiplier: 1.2, magicalDamageBonus: 4, naturalRoll: 20, defender: { ...stats, flatDR: 3 } }, () => 100)).toMatchObject({ rawDamage: 20, finalDamage: 17, drAbsorbed: 3 });
+    expect(resolveAttack({ ...attack, baseDamage: 9, physicalDamageMultiplier: 1.2, magicalDamageBonus: 4, isMagic: true, isMelee: false, defender: { ...stats, flatDR: 3 } }, () => 100)).toMatchObject({ rawDamage: 13, finalDamage: 10 });
+    expect(resolveAttack({ ...attack, physicalDamageMultiplier: 1.2, attacker: { ...stats, raceId: 'ORC', hp: 10 } }, () => 100).rawDamage).toBe(7);
+  });
+  it('restricts spell extra actions to intelligence and preserves physical offhand action budgets', () => {
+    const spell = { type: 'SPELL', spellId: 'HEALING_LIGHT', targetId: 'ally' } as const;
+    expect(validateAction(spell, 0, 20, 10)).toBe(true);
+    expect(validateAction(spell, 1, 20, 10)).toBe(false);
+    expect(validateAction(spell, 1, 10, 20)).toBe(true);
+    expect(validateAction(spell, 2, 10, 20)).toBe(false);
+    expect(validateAction({ type: 'ATTACK', subType: 'THRUST', targetId: 'enemy', hand: 'OFF' }, 1, 20, 10)).toBe(true);
   });
 });

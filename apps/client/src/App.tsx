@@ -1,3 +1,4 @@
+import { PROTOCOL_VERSION } from "@df/shared";
 import { lazy, Suspense } from "react";
 const CharacterCreatorScreen = lazy(() => import("./components/character/CharacterCreatorScreen").then(module => ({ default: module.CharacterCreatorScreen })));
 const BoardScreen = lazy(() => import("./components/BoardScreen").then(module => ({ default: module.BoardScreen })));
@@ -16,7 +17,7 @@ export function App() {
     {screen !== "LOBBY" && <ConnectionBar/>}
     {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => useUIStore.setState({ notice: "" })}>×</button></div>}
     {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : own?.status === "NEEDS_CHARACTER_CREATION" && !own.characterId ? <Suspense fallback={<p role="status">Preparando criação de personagem…</p>}><CharacterCreatorScreen key={own.id}/></Suspense> : own?.role === "MASTER" || own?.status === "READY" ? <Suspense fallback={<p role="status">Preparando tabuleiro…</p>}><BoardScreen/></Suspense> : <RoomScreen/>}
-    <footer>Dungeons & Friends · v0.4.0</footer>
+    <footer>Dungeons & Friends · v{PROTOCOL_VERSION}</footer>
   </main>;
 }
 function ConnectionBar() {
