@@ -87,3 +87,11 @@ Toque/clique em um hexágono para mover. Arraste o chão para pan, use a roda ou
 O editor tem seleção e quatro camadas: Terreno, Paredes, Objetos e Entidades. Terreno amplia os limites. Objetos aceitam rotação e sobreposição; a seleção alterna os elementos do mesmo hexágono, também disponíveis no seletor do painel. **Oculto** controla a visibilidade de objetos e monstros para jogadores. Arrastar um token ou usar coordenadas reposiciona com autoridade do Mestre. **Undo/Redo**, `Ctrl+Z` e `Ctrl+Y` restauram edições; uma edição nova descarta a ramificação de Redo. A restauração rejeita posições que prenderiam ou sobreporiam personagens.
 
 `Ctrl+Shift+D` ou **Debug** mostra coordenadas e alcance de visão. A visão compartilhada de quatro hexágonos é calculada no servidor: `StateView` filtra monstros, objetos e tokens de outros jogadores. A névoa local conserva apenas terreno e paredes da câmara atual. Câmera e tokens usam contextos/timelines GSAP, com limpeza ao sair e respeito a `prefers-reduced-motion`.
+
+## Fase 6 — manutenção do SQLite
+
+A migração `0005_finalize_mvp_schema.sql` prepara checkpoints de recuperação e índices de consulta. A gravação e a decisão de restauração pós-crash serão integradas no próximo incremento; acompanhe [o progresso da fase 6](Documents/fase6-progresso.md).
+
+O banco usa WAL com `synchronous=NORMAL` por padrão. Configure `DB_SYNCHRONOUS=FULL` no ambiente do host para maior durabilidade contra perda de energia. Valores diferentes de NORMAL/FULL são rejeitados.
+
+Com o host parado, rode `pnpm db:sanitize` para consolidar o WAL e verificar integridade. O comando respeita `DATABASE_PATH`, não executa seeds, mantém fichas/inventários e dados de recuperação de sessões ativas, e remove somente sessões CLOSED expiradas (30 dias), checkpoints encerrados antigos, histórico explicitamente descartado e tokens de reconexão antigos. Histórico ainda disponível para Undo/Redo e tokens de sessão são preservados. Leitores que impedirem TRUNCATE ou erros de integridade produzem saída com código 1.

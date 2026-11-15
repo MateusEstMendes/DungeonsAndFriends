@@ -221,7 +221,7 @@ it('upgrades a real v0.3 database without changing characters, maps or credentia
   expect(upgraded.db.select().from(schema.chambers).all()).toHaveLength(3);
   expect(upgraded.db.select().from(schema.monstersCatalog).all()).toHaveLength(10);
   upgraded.close(); const second = openDatabase(filename); databases.push(second);
-  expect(second.sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 5 });
+  expect(second.sqlite.prepare('SELECT count(*) AS count FROM __drizzle_migrations').get()).toEqual({ count: 6 });
   expect(second.db.select().from(schema.monstersCatalog).all()).toHaveLength(10);
 });
 

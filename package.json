@@ -17,7 +17,8 @@
     "db:generate": "pnpm --filter @df/server db:generate",
     "db:migrate": "pnpm --filter @df/server db:migrate",
     "db:studio": "pnpm --filter @df/server db:studio",
-    "start:host": "pnpm build && pnpm --filter @df/server start:host"
+    "start:host": "pnpm build && pnpm --filter @df/server start:host",
+    "db:sanitize": "pnpm --filter @df/server db:sanitize"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",

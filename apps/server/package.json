@@ -12,7 +12,8 @@
     "start:host": "tsx src/tunnel.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:sanitize": "node --import tsx src/scripts/sanitizeDb.ts"
   },
   "dependencies": {
     "@colyseus/core": "^0.18.12",

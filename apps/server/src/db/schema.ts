@@ -1,6 +1,6 @@
 import type { RaceId, ArchetypeId, AttributeId, InventorySlot, ItemId, SpellId } from "@df/shared";
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, unique, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, integer, sqliteTable, text, unique, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 export const dungeonsMigrations = sqliteTable("_dungeons_migrations", {
   version: text("version").primaryKey(),
@@ -32,6 +32,7 @@ export const players = sqliteTable("players", {
   lastSeenAt: integer("last_seen_at").notNull().$defaultFn(() => Date.now()),
 }, table => [
   index("players_room_id_idx").on(table.roomId),
+  index("idx_players_room_token").on(table.roomId, table.sessionToken),
   check("players_approval_status_valid", sql`${table.approvalStatus} IN ('PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'NEEDS_CHARACTER_CREATION')`),
 ]);
 
@@ -42,6 +43,7 @@ export const sessions = sqliteTable("sessions", {
   updatedAt: integer("updated_at").notNull().$defaultFn(() => Date.now()),
 }, table => [
   index("sessions_room_id_idx").on(table.roomId),
+  uniqueIndex("sessions_room_id_id_unique").on(table.roomId, table.id),
   check("sessions_status_valid", sql`${table.status} IN ('ACTIVE', 'CLOSED')`),
 ]);
 
@@ -107,7 +109,7 @@ export const chambers = sqliteTable("chambers", {
 export const terrainCells = sqliteTable("terrain_cells", {
   id: text("id").primaryKey(), chamberId: text("chamber_id").notNull().references(() => chambers.id),
   q: integer("q").notNull(), r: integer("r").notNull(), terrain: text("terrain").notNull(),
-}, t => [unique("terrain_cells_chamber_q_r_unique").on(t.chamberId, t.q, t.r), check("terrain_cells_terrain_valid", sql`${t.terrain} IN ('STONE','GRASS','DIRT','SAND','WATER','DEEP_WATER','OBSTACLE')`)]);
+}, t => [index("idx_cells_chamber_qr").on(t.chamberId, t.q, t.r), unique("terrain_cells_chamber_q_r_unique").on(t.chamberId, t.q, t.r), check("terrain_cells_terrain_valid", sql`${t.terrain} IN ('STONE','GRASS','DIRT','SAND','WATER','DEEP_WATER','OBSTACLE')`)]);
 export const walls = sqliteTable("walls", {
   id: text("id").primaryKey(), chamberId: text("chamber_id").notNull().references(() => chambers.id), edgeKey: text("edge_key").notNull(),
 }, t => [unique("walls_chamber_edge_unique").on(t.chamberId, t.edgeKey)]);
@@ -121,8 +123,9 @@ export const placedObjects = sqliteTable("placed_objects", {
 export const editorHistory = sqliteTable("editor_history", {
   id: integer("id").primaryKey({ autoIncrement: true }), roomId: text("room_id").notNull().references(() => rooms.id),
   beforeJson: text("before_json").notNull(), afterJson: text("after_json").notNull(),
+  discarded: integer("discarded", { mode: "boolean" }).notNull().default(false),
   undone: integer("undone", { mode: "boolean" }).notNull().default(false),
-}, t => [check("editor_history_undone_valid", sql`${t.undone} IN (0,1)`)]);
+}, t => [check("editor_history_discarded_valid", sql`${t.discarded} IN (0,1)`), check("editor_history_undone_valid", sql`${t.undone} IN (0,1)`)]);
 
 export const monstersCatalog = sqliteTable('monsters_catalog', {
   id: text('id').primaryKey(), name: text('name').notNull(),
@@ -173,6 +176,7 @@ export const inventories = sqliteTable('inventories', {
   itemId: text('item_id').$type<ItemId>().notNull().references(() => itemsCatalog.id),
   slot: text('slot').$type<InventorySlot>().notNull().default('BAG'), quantity: integer('quantity').notNull().default(1),
 }, t => [index('inventories_character_idx').on(t.characterId),
+  index('idx_inventories_char_slot').on(t.characterId, t.slot),
   uniqueIndex('inventories_equipped_slot_unique').on(t.characterId, t.slot).where(sql`${t.slot} != 'BAG'`),
   uniqueIndex('inventories_bag_stack_unique').on(t.characterId, t.itemId).where(sql`${t.slot} = 'BAG'`),
   check('inventories_slot_valid', sql`${t.slot} IN ('MAIN_HAND','OFF_HAND','ARMOR','BAG')`),
@@ -193,3 +197,17 @@ export const chests = sqliteTable('chests', {
   gold: integer('gold').notNull().default(0), itemsJson: text('items_json').notNull().default('[]'),
 }, t => [check('chests_gold_valid', sql`typeof(${t.gold}) = 'integer' AND ${t.gold} >= 0 AND ${t.gold} <= 9007199254740991`),
   check('chests_items_valid', sql`json_valid(${t.itemsJson}) AND json_type(${t.itemsJson}) = 'array'`)]);
+
+export const crashRecoveryCheckpoints = sqliteTable('crash_recovery_checkpoints', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  roomId: text('room_id').notNull().unique().references(() => rooms.id),
+  sessionId: text('session_id').notNull(),
+  serializedRoomState: text('serialized_room_state').notNull(),
+  combatSnapshotJson: text('combat_snapshot_json'),
+  lastEventType: text('last_event_type').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, t => [
+  foreignKey({ columns: [t.roomId, t.sessionId], foreignColumns: [sessions.roomId, sessions.id] }),
+  check('recovery_room_json_valid', sql`json_valid(${t.serializedRoomState}) AND json_type(${t.serializedRoomState}) = 'object'`),
+  check('recovery_combat_json_valid', sql`${t.combatSnapshotJson} IS NULL OR (json_valid(${t.combatSnapshotJson}) AND json_type(${t.combatSnapshotJson}) = 'object')`),
+]);

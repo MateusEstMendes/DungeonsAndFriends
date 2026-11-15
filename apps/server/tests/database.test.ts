@@ -60,7 +60,7 @@ describe("persistência SQLite", () => {
     const second = open(path);
     expect(second.db.select().from(rooms).get()?.code).toBe("AB2CD");
     expect(second.db.select().from(dungeonsMigrations).all()).toEqual(initialLedger);
-    expect(second.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 5 });
+    expect(second.sqlite.prepare("SELECT count(*) AS count FROM __drizzle_migrations").get()).toEqual({ count: 6 });
     second.sqlite.prepare("UPDATE _dungeons_migrations SET checksum = 'altered'").run();
     second.close();
     expect(() => openDatabase(path)).toThrow("alterada após aplicação");

@@ -138,7 +138,7 @@ it('migrates a populated v0.4 WAL database preserving identity, vitals, human bo
   expect(JSON.parse(participant.statsJson)).toEqual({ name: 'Goblin', cooldowns: { test: 5 }, isAutoMode: false, allowAutoFlee: false });
   const inventory = db.db.select().from(s.inventories).all(); db.close();
   const again = open(path); expect(again.db.select().from(s.inventories).all()).toEqual(inventory);
-  expect(again.sqlite.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 5 });
+  expect(again.sqlite.prepare('SELECT count(*) count FROM __drizzle_migrations').get()).toEqual({ count: 6 });
   expect(again.sqlite.pragma('foreign_key_check')).toEqual([]);
 });
 it('keeps tuned stats when the starter equipment has no armor/shield modifiers', () => {

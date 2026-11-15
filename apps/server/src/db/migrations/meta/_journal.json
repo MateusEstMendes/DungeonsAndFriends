@@ -36,6 +36,13 @@
       "when": 1794699353036,
       "tag": "0004_add_items_economy_spells",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794750820416,
+      "tag": "0005_finalize_mvp_schema",
+      "breakpoints": true
     }
   ]
 }

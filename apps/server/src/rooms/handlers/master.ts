@@ -106,7 +106,7 @@ export class MasterHandler {
   }
   history(redo: boolean) {
     const { db } = this.database;
-    const entry = db.select().from(editorHistory).where(and(eq(editorHistory.roomId, this.roomId), eq(editorHistory.undone, redo)))
+    const entry = db.select().from(editorHistory).where(and(eq(editorHistory.roomId, this.roomId), eq(editorHistory.undone, redo), eq(editorHistory.discarded, false)))
       .orderBy(redo ? asc(editorHistory.id) : desc(editorHistory.id)).get();
     if (!entry) throw new Error(redo ? "Nada para refazer." : "Nada para desfazer.");
     const data: BoardSnapshot = JSON.parse(redo ? entry.afterJson : entry.beforeJson);
