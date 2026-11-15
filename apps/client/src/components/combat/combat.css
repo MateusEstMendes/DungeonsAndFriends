@@ -13,3 +13,5 @@
 
 .combat-support-targets{position:absolute;left:24px;top:40%;display:grid;gap:6px;max-height:25%;overflow:auto;pointer-events:auto}
 .combat-support-targets button{min-height:44px;background:#191823ed;padding:8px;font-size:12px}
+.combat-submenu .submenu-close,.referee-bar button,.referee-bar summary { min-height:44px; min-width:44px; }
+.battle-dock { padding-bottom:max(8px,env(safe-area-inset-bottom)); }

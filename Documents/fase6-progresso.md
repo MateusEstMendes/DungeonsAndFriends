@@ -56,3 +56,30 @@ Implementar o serviço de checkpoints e o ciclo de encerramento/restauração: d
 - API vigente do Howler usa `autoUnlock`, substituindo a opção legada `mobileAutoEnable` citada no plano.
 - Validação: build passou; suíte completa com 188 testes passou; rodada específica com 18 testes passou após adicionar o cenário narrativo (autorização, broadcast, rate limit e payload inválido). Testes de áudio cobrem desbloqueio, retorno da aba, crossfade rápido, limites do sprite e outcomes reais de esquiva/cura/magia.
 - Reprodução audível e comportamento em iPhone/Android físicos ainda precisam de verificação manual.
+
+## Pausa solicitada pelo usuário
+
+Etapas 1–3 registradas em `c045c91`, `ffda6b0` e `c558413`. Etapa 4 tem implementação de PWA, ícones, cache, prompt seguro, gestos e recuperação gráfica no diretório de trabalho, ainda sem conclusão/commit. Etapa 5 pendente. Não considerar a fase 6 concluída.
+
+Roteiro para testar: [fase6-testes-manuais.md](fase6-testes-manuais.md). Alterações externas nos documentos de especificação foram preservadas.
+
+Build de preparação para a pausa: `pnpm build` passou, incluindo geração do Service Worker e manifesto. A etapa 4 ainda precisa dos testes de navegador antes do commit de conclusão.
+
+## Retomada — validação das etapas 4 e 5 em andamento
+
+- Build PWA passou. Divisão automática do Vite preserva lazy loading; agrupamento manual foi retirado porque trouxe dependências gráficas para o lobby e depois causou erro de inicialização.
+- Removido ajuste de altura que deslocava o centro do canvas para um controle de comércio. Tabuleiro desktop e mobile/portais passaram novamente.
+- Vitest: 31 arquivos / 189 testes aprovados. Teste adicional em processo separado executa SIGKILL após magia, confirma HP/MP, posições, ouro, iniciativa, ações e integridade SQLite: aprovado.
+- Cenários E2E de magia/IA e perspectiva do Mestre passaram. Cenário seguinte de combate falhou aguardando arena; contexto ficou aberto e afetou os próximos testes. Adicionado teardown dos contextos explícitos em todas as specs para impedir cascata. Revalidação isolada em andamento.
+- Lighthouse inicial: performance 70, acessibilidade/boas práticas/SEO 100; medição anterior à retirada dos chunks manuais. Nova medição pendente. Lighthouse atual não fornece a antiga categoria PWA; manifesto, cache e SW são testados no Playwright.
+- Etapas 4 e 5 ainda não marcadas concluídas. Mesa Zero e dispositivos físicos continuam pendentes.
+
+Validação manual informada pelo usuário na retomada: **testou nos celulares e funcionou**. Modelos, navegadores e verificações individuais não foram especificados; não inferir validação completa de cada item nem execução da Mesa Zero.
+
+## Etapa 4 — PWA e mobile concluída
+
+- Manifesto standalone, ícones PNG reproduzíveis, metadados iOS, Workbox com cache de mídia e rotas de API exclusivamente em rede. Atualização fica bloqueada durante combate.
+- Pinça trava o toque até todos os dedos saírem; cancelamento/visibilidade limpam ponteiros, histerese de 8 px e velocidade de pan limitada. Controles táteis, safe areas e tratamento de perda/restauração de contexto WebGL implementados.
+- A divisão de chunks fica a cargo do Vite, com as telas lazy já existentes. Agrupamento manual descartado após validação revelar carregamento gráfico indevido no lobby e erro de inicialização.
+- Build passou. Os dois cenários de tabuleiro (desktop/mobile/portais) passaram. Os dois testes novos de PWA e pinça passaram em 20,5 s: manifesto, cache offline de áudio, reabertura da interface offline, API sem cache, pinça sem edição e toque posterior funcional.
+- Validação em celulares informada pelo usuário: funcionou. Etapa 5 continua em validação; não confundir este registro com aprovação da Mesa Zero.

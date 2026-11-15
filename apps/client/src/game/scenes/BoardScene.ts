@@ -27,6 +27,7 @@ export class BoardScene {
   private press?: { x: number; y: number; moved: boolean; entity?: BoardEntity; chamberId: string };
   private velocity = { x: 0, y: 0 };
   private pinchDistance = 0;
+  private pinchLockedUntilRelease = false;
   private cameraTween?: gsap.core.Tween;
   private pulse?: gsap.core.Tween;
   private resize: ResizeObserver;
@@ -43,6 +44,7 @@ export class BoardScene {
     canvas.addEventListener("pointercancel", this.pointerCancel, options);
     canvas.addEventListener("wheel", this.wheel, { ...options, passive: false });
     window.addEventListener("keydown", this.keyDown, options);
+    document.addEventListener("visibilitychange", this.resetPointers, options);
     this.viewport.addChild(this.chatLayer);
     this.render();
     this.app.canvas.setAttribute("data-scene-ready", "true");
@@ -147,10 +149,13 @@ export class BoardScene {
     if (event.button !== 0) return;
     const p = this.point(event); this.pointers.set(event.pointerId, p); this.app.canvas.setPointerCapture(event.pointerId);
     this.cameraTween?.kill(); gsap.killTweensOf(this.viewport); gsap.killTweensOf(this.viewport.scale);
+    if (this.pointers.size >= 2 || this.pinchLockedUntilRelease) {
+      this.pinchLockedUntilRelease = true; this.press = undefined;
+      this.pinchDistance = this.fingerDistance(); this.velocity = { x: 0, y: 0 }; return;
+    }
     const picked = this.pick(p), board = useBoardStore.getState();
     this.press = { ...p, moved: false, chamberId: picked?.chamber.id ?? "", entity: useGameStore.getState().role === "MASTER" && board.tool === "SELECT" && picked ? this.entitiesAt(picked.chamber.id, picked.hex)[0] : undefined };
     this.velocity = { x: 0, y: 0 };
-    if (this.pointers.size > 1) { this.press.moved = true; this.press.entity = undefined; this.pinchDistance = this.fingerDistance(); }
   };
   private fingerDistance() { const [a, b] = [...this.pointers.values()]; return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0; }
   private pointerMove = (event: PointerEvent) => {
@@ -162,17 +167,18 @@ export class BoardScene {
       if (this.pinchDistance > 0) this.zoom(distance / this.pinchDistance, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
       this.pinchDistance = distance; return;
     }
-    if (this.press && Math.hypot(p.x - this.press.x, p.y - this.press.y) > 6) this.press.moved = true;
+    if (this.press && Math.hypot(p.x - this.press.x, p.y - this.press.y) > 8) this.press.moved = true;
+    if (this.pinchLockedUntilRelease) return;
     if (this.press?.moved && !this.press.entity) {
-      this.velocity = { x: p.x - previous.x, y: p.y - previous.y };
+      this.velocity = { x: Math.max(-40, Math.min(40, p.x - previous.x)), y: Math.max(-40, Math.min(40, p.y - previous.y)) };
       this.viewport.x += this.velocity.x; this.viewport.y += this.velocity.y;
     }
   };
   private pointerUp = (event: PointerEvent) => {
-    const p = this.point(event), press = this.press, wasPinching = this.pointers.size > 1;
+    const p = this.point(event), press = this.press, wasPinching = this.pinchLockedUntilRelease || this.pointers.size > 1;
     this.pointers.delete(event.pointerId);
     if (this.app.canvas.hasPointerCapture(event.pointerId)) this.app.canvas.releasePointerCapture(event.pointerId);
-    if (wasPinching) { this.press = undefined; return; }
+    if (wasPinching) { this.press = undefined; this.pinchDistance = 0; if (!this.pointers.size) this.pinchLockedUntilRelease = false; return; }
     this.press = undefined;
     if (!press) return;
     const picked = this.pick(p);
@@ -180,7 +186,12 @@ export class BoardScene {
     else if (!press.moved && picked) this.click(picked.chamber, picked.hex);
     else if (!this.motion.reduced) this.motion.run(() => { this.cameraTween = gsap.to(this.viewport, { x: this.viewport.x + this.velocity.x * 8, y: this.viewport.y + this.velocity.y * 8, duration: 0.45, ease: "power2.out", overwrite: true }); });
   };
-  private pointerCancel = (event: PointerEvent) => { this.pointers.delete(event.pointerId); this.press = undefined; };
+  private resetPointers = () => {
+    for (const id of this.pointers.keys()) if (this.app.canvas.hasPointerCapture(id)) this.app.canvas.releasePointerCapture(id);
+    this.pointers.clear(); this.press = undefined; this.pinchDistance = 0; this.pinchLockedUntilRelease = false;
+    this.velocity = { x: 0, y: 0 }; this.cameraTween?.kill();
+  };
+  private pointerCancel = () => this.resetPointers();
   private zoom(factor: number, anchor: { x: number; y: number }) {
     const local = this.viewport.toLocal(anchor), scale = Math.max(0.15, Math.min(2.8, this.viewport.scale.x * factor));
     this.viewport.scale.set(scale); this.viewport.position.set(anchor.x - local.x * scale, anchor.y - local.y * scale);
@@ -224,7 +235,7 @@ export class BoardScene {
     else if (ctrl && useGameStore.getState().role === "MASTER" && (key === "z" || key === "y")) { event.preventDefault(); boardCommand(key === "y" || event.shiftKey ? "MASTER_REDO" : "MASTER_UNDO"); }
   };
   destroy() {
-    this.events.abort(); this.resize.disconnect(); this.unsubscribers.forEach(unsubscribe => unsubscribe());
+    this.resetPointers(); this.events.abort(); this.resize.disconnect(); this.unsubscribers.forEach(unsubscribe => unsubscribe());
     this.motion.destroy();
     for (const layer of this.layers.values()) { layer.entities.dispose(); layer.fog.dispose(); }
     this.viewport.destroy({ children: true });

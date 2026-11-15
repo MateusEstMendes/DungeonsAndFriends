@@ -11,3 +11,7 @@
 .audio-panel label { margin-top:12px; }
 .audio-panel input { min-width:44px; min-height:44px; }
 .audio-panel button { min-width:44px; min-height:44px; margin:4px; }
+html,body { height:100vh; height:100dvh; overscroll-behavior:none; }
+.topbar { padding-top:max(16px,env(safe-area-inset-top)); }
+.pwa-update { position:fixed; bottom:max(12px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); z-index:9000; width:min(550px,calc(100vw - 24px)); padding:12px; background:#24212b; border:1px solid #d9b66b; border-radius:12px; display:flex; align-items:center; gap:12px; }
+@media(pointer:coarse) { button,summary,input,select { min-height:44px!important; min-width:44px; } }

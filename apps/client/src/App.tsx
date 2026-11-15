@@ -1,6 +1,7 @@
 import { RecoveryModal } from "./components/master/RecoveryModal";
 import { boardCommand } from "./network/colyseusClient";
 import { PROTOCOL_VERSION } from "@df/shared";
+import { PwaUpdatePrompt } from "./components/PwaUpdatePrompt";
 import { AudioSettings } from "./components/AudioSettings";
 import { initializeAudio } from "./audio/soundManager";
 import { useEffect } from "react";
@@ -24,6 +25,7 @@ export function App() {
     {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => useUIStore.setState({ notice: "" })}>×</button></div>}
     {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : own?.status === "NEEDS_CHARACTER_CREATION" && !own.characterId ? <Suspense fallback={<p role="status">Preparando criação de personagem…</p>}><CharacterCreatorScreen key={own.id}/></Suspense> : own?.role === "MASTER" || own?.status === "READY" ? <Suspense fallback={<p role="status">Preparando tabuleiro…</p>}><BoardScreen/></Suspense> : <RoomScreen/>}
     <RecoveryModal/>
+    <PwaUpdatePrompt/>
     <footer>Dungeons & Friends · v{PROTOCOL_VERSION}</footer>
   </main>;
 }

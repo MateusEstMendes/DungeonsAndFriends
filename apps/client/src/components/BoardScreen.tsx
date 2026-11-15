@@ -16,6 +16,7 @@ import { AdventureHUD } from "./hud/AdventureHUD";
 import { PlayerHUD } from "./hud/PlayerHUD";
 import "./board.css";
 export function BoardScreen() {
+  const [contextLost, setContextLost] = useState(false);
   const host = useRef<HTMLDivElement>(null), [error, setError] = useState("");
   const game = useGameStore(), board = useBoardStore();
   const { combat, proximity } = useCombatStore();
@@ -31,13 +32,16 @@ export function BoardScreen() {
   const chamberId = game.role === "MASTER" ? board.focusChamberId || board.chambers.find(c => c.mapId === board.activeStageId)?.id : own?.currentChamberId;
   const chamber = board.chambers.find(c => c.id === chamberId);
   useEffect(() => {
+    const status = (event: Event) => setContextLost((event as CustomEvent<boolean>).detail);
+    const container = host.current!; container.addEventListener('df-context-status', status, true);
     const pixi = new PixiApp(); let scene: BoardScene | CombatPOVScene | undefined, cancelled = false;
     void pixi.init(host.current!).then(ready => { if (ready && !cancelled) scene = arena ? new CombatPOVScene(pixi.app, host.current!) : new BoardScene(pixi.app, host.current!); }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : "Falha ao abrir tabuleiro."); });
-    return () => { cancelled = true; scene?.destroy(); pixi.destroy(); };
+    return () => { container.removeEventListener('df-context-status', status, true); setContextLost(false); cancelled = true; scene?.destroy(); pixi.destroy(); };
   }, [arena]);
   return <section className={`board-screen${arena ? ' combat-screen' : ''}`} aria-label={arena ? 'Arena de combate' : 'Mesa de aventura'}>
     <div ref={host} className="board-canvas"/>
     {own?.awaitingPosition && <div className="board-error board-glass" role="status">Aguardando posicionamento pelo mestre. Não há casa livre na sua câmara.</div>}
+    {contextLost && <div className="board-error board-glass" role="status">Restaurando gráficos…</div>}
     {error && <div className="board-error board-glass" role="alert">Não foi possível iniciar o tabuleiro: {error}. Recarregue a página e verifique a aceleração gráfica do navegador.</div>}
     <AdventureHUD chamberId={arena ? combat.chamberId : chamberId} arena={arena}/>
     {arena ? <><CombatOverlay/><MasterRefereeBar/></> : <>

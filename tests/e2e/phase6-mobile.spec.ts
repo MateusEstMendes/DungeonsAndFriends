@@ -1,0 +1,34 @@
+import { test, expect } from './fixtures';
+test('PWA has installable manifest, caches media offline and keeps API network-only', async ({ page, context }) => {
+  await page.goto('/');
+  const manifest = await (await page.request.get('/manifest.json')).json();
+  expect(manifest.display).toBe('standalone'); expect(manifest.icons).toHaveLength(3);
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await page.reload();
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  const size = await page.evaluate(async () => (await (await fetch('/audio/sfx-sprite.webm')).arrayBuffer()).byteLength);
+  expect(size).toBeGreaterThan(1000);
+  await expect.poll(() => page.evaluate(async () => Boolean(await caches.match('/audio/sfx-sprite.webm')))).toBe(true);
+  await context.setOffline(true);
+  expect(await page.evaluate(async () => (await (await fetch('/audio/sfx-sprite.webm')).arrayBuffer()).byteLength)).toBe(size);
+  expect(await page.evaluate(async () => { try { await fetch('/health'); return true; } catch { return false; } })).toBe(false);
+  await page.reload(); await expect(page.getByRole('heading', { name: 'Dungeons & Friends' })).toBeVisible();
+});
+test('pinch never edits terrain and a subsequent single tap works', async ({ browser }) => {
+  const context = await browser.newContext({ hasTouch: true, viewport: { width: 1280, height: 800 } });
+  const page = await context.newPage(); let edits = 0;
+  page.on('websocket', socket => socket.on('framesent', ({ payload }) => { if (Buffer.from(payload).includes(Buffer.from('MASTER_EDIT'))) edits++; }));
+  await page.goto('/'); await page.getByText('Acesso do Mestre', { exact: true }).click();
+  await page.getByLabel('Senha do Mestre').fill('board-e2e-password'); await page.getByRole('button', { name: 'Entrar como Mestre' }).click();
+  await page.getByRole('button', { name: 'Terreno', exact: true }).click();
+  const canvas = page.locator('.board-canvas canvas'); await expect(canvas).toHaveAttribute('data-scene-ready', 'true');
+  await page.waitForTimeout(800); const box = (await canvas.boundingBox())!;
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x-30, y, id: 1 }, { x: x+30, y, id: 2 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x-60, y, id: 1 }, { x: x+60, y, id: 2 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForTimeout(200); expect(edits).toBe(0);
+  await page.touchscreen.tap(x,y); await expect.poll(() => edits).toBe(1);
+  await page.getByRole('button', { name: 'Sair', exact: true }).click(); await context.close();
+});
