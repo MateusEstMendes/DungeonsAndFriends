@@ -23,7 +23,7 @@ Este documento estabelece as decisões técnicas, a stack tecnológica, a organi
 | **Suporte Mobile & PWA**| vite-plugin-pwa | `^1.x` (Workbox) | Cache-First para spritesheets e sons (carregamento instantâneo), manifesto standalone e suporte a toque (pinch, pan). |
 
 ---
-
+ 
 ## 2. Estrutura Completa de Pastas e Arquivos (Monorepo pnpm)
 
 ```text
