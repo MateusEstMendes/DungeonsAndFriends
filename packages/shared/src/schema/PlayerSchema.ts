@@ -19,6 +19,9 @@ export class PlayerSchema extends Schema {
   @type("number") maxMp = 0;
   @type("number") defense = 0;
   @type("number") speed = 0;
+  @type("number") finalDex = 0;
+  @type("number") dodgeChance = 0;
+  @type("number") flatDr = 0;
   @type("boolean") connected = false;
   @type("boolean") reconnecting = false;
   @type("boolean") awaitingPosition = false;

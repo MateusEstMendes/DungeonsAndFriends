@@ -62,8 +62,33 @@ Implementado conforme `fase5-plano.md`, mantendo o combate JRPG:
 - O SQL da migração também foi executado isoladamente em teste, confirmando os 28 itens e quatro feitiços sem depender do seed em TypeScript.
 - `git diff --check`: passou. Validação em bancos temporários/em memória; o banco de uso normal receberá migração e seed automaticamente na próxima inicialização do servidor.
 
+## Incremento 4: Etapa 3 — handlers transacionais, chat e dados
+
+- `rooms/handlers/shop.ts` integra `REQUEST_INVENTORY`, equipamento/desequipamento, leitura de pergaminhos, abertura/coleta de baús, abertura/compra/venda em lojas e edição/concessão pelo Mestre.
+- Mutações usam transações síncronas `better-sqlite3` em modo `IMMEDIATE`. Saldo, propriedade dos itens, estoque/loot e quantidades são relidos dentro da transação. Falhas de gravação revertem todas as mudanças; estado público e mensagens de confirmação são atualizados após o commit.
+- As interações de jogadores validam identidade conectada, aprovação persistida, propriedade da ficha, presença, HP positivo, câmara, adjacência, paredes, ocultação e `isArchived = false`. A autorização é revalidada em cada operação, independentemente de ter aberto a loja/baú antes.
+- Compra utiliza o preço persistido no catálogo; venda aceita apenas `BAG`, calcula 50% por unidade arredondando para baixo e rejeita quantidades ou saldos inválidos/overflow. Estoque `null` permanece infinito; estoque finito é decrementado. A venda remove o item e credita ouro, sem repor o estoque da loja.
+- Equipar consome uma cópia da mochila, devolve itens deslocados para pilhas e recalcula Defesa/DES/esquiva/DR/velocidade a partir de `baseFinalDex`. A troca não restaura passos de movimento já gastos. Aprender pergaminho insere a magia e decrementa o item atomicamente; magia já conhecida não consome outro pergaminho.
+- Ferramentas administrativas permitem editar lojas/baús e conceder ouro/itens a personagens aprovados, inclusive offline. Operações de economia/equipamento/scroll e edições administrativas ficam bloqueadas durante combate; a leitura da ficha, chat e dados continuam disponíveis.
+- `InventoryRepository` centraliza pilhas, metadados do catálogo, recálculo e snapshots. `INVENTORY_SYNC` envia ouro, equipamento, mochila, grimório e atributos ao dono e ao Mestre; consultar outro inventário exige papel de Mestre. A sincronização ocorre também ao criar/entrar/reconectar com uma ficha.
+- `SHOP_SYNC`/`CHEST_SYNC` atualizam quem abriu o objeto e continua autorizado/adjacente. Observadores ausentes, afastados ou sem acesso deixam de receber atualizações.
+- `rooms/handlers/chatAndLog.ts` transmite chat de texto simples com `expiresAt = createdAt + 7000`, sem guardá-lo no banco ou no histórico do servidor. Rolagens `d4/d6/d8/d10/d12/d20/d100` usam `diceService.roll` no servidor e emitem `DICE_RESULT` e `LOG_ENTRY`.
+- Chat, dados e logs são enviados somente à câmara do jogador e ao Mestre. O Mestre pode informar `chamberId`; por padrão usa a câmara do combate ativo ou a primeira câmara da fase ativa. Jogadores não podem redirecionar mensagens para outra câmara.
+- Logs de combate e dados são deduplicados e limitados aos últimos 200 eventos em memória, disponíveis em `LOG_SYNC`/`REQUEST_LOG` e descartados com a instância da sala. Chat não é reapresentado ao reconectar.
+- O cliente registra os novos pacotes em `useEconomyStore`, expira mensagens, mantém uma fala por participante, limita/deduplica o log e limpa dados ao sair. Modais, gavetas, balões e botões visuais continuam na Etapa 5.
+
+### Validação do incremento 4
+
+- `pnpm build`: passou; permanece o aviso de bundle acima de 500 kB.
+- `pnpm test`: 26 arquivos e 163 testes passaram.
+- `tests/e2e/combat-perspective.spec.ts`: passou em Chromium após integrar os novos pacotes à conexão da sala.
+- `git diff --check`: passou.
+- Teste de sala com sockets reais: dois jogadores disputam o último item de um baú e a última unidade de estoque; apenas um comando vence em cada disputa. Inventários não são enviados ao outro jogador; chat/dados/logs não chegam ao personagem de outra câmara.
+- Testes cobrem venda 50%, bloqueio de item equipado, slots 2H/duas cópias, armadura, passos gastos, scroll duplicado, visibilidade/adjacência, ferramentas do Mestre e rollback de compra/equipamento/scroll/overflow de ouro de baú.
+- Chat testado com TTL de 7 segundos, ausência de gravações SQLite/histórico e expiração/substituição no cliente; histórico de dados/combate é limitado e não sobrevive à criação de outro handler de sala.
+
 ## Próximo incremento
 
-Etapa 3: handlers transacionais de inventário/equipamento, pergaminhos, lojas, baús, ferramentas do Mestre, chat efêmero e rolagens livres. Todas as interações com objetos deverão validar câmara, presença, visibilidade, adjacência e estado ativo (`isArchived = false`), além de autoria/autorização. Comércio e coleta ainda não estão disponíveis na interface.
+Etapa 4: integrar equipamentos, consumíveis e grimório reais ao executor de combate; substituir ataques/pocões provisórios; executar magias individuais/área, buffs, SLOW e veneno; implementar IA por turnos com alternância individual/global e pausa sem o Mestre. As interfaces completas de comércio, ficha/mochila/grimório, chat, dados e log seguem na Etapa 5.
 
-A integração completa do inventário/consumíveis/grimório ao combate e a IA continuam reservadas à Etapa 4. A falha de reconexão registrada no primeiro incremento permanece pendente.
+A falha de reconexão registrada no primeiro incremento permanece pendente.

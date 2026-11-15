@@ -1,9 +1,11 @@
 import { Client, type Room } from "@colyseus/sdk";
-import { PROTOCOL_VERSION, RoomCodeSchema, SessionCredentialsPayloadSchema, type RoomState, type CharacterCreationPayload, type ApprovalStatus } from "@df/shared";
+import { CHAT_TTL_MS, PROTOCOL_VERSION, RoomCodeSchema, SessionCredentialsPayloadSchema, type RoomState, type CharacterCreationPayload, type ApprovalStatus, type InventorySnapshot, type ShopSnapshot, type ChestSnapshot, type EphemeralChatMessage, type DiceResult, type SessionLogEntry } from "@df/shared";
 import { initialGameState, useGameStore } from "../store/useGameStore";
 import { useUIStore } from "../store/useUIStore";
 import { initialBoardState, useBoardStore } from "../store/useBoardStore";
 import { emptyCombat, initialCombatState, useCombatStore, type CombatEvent, type CombatParticipant, type CombatSnapshot } from '../store/useCombatStore';
+
+import { useEconomyStore, initialEconomyState, receiveChat, expireChat, receiveLog } from "../store/useEconomyStore";
 
 import { savedSession, persistCredentials, persistReconnectionToken, clearSession } from "./sessionPersistence";
 export { savedSession } from "./sessionPersistence";
@@ -31,7 +33,7 @@ function attach(room: Room<unknown, RoomState>) {
   let lastPlayers = "";
   let networkErrorNotice: string | undefined;
   const sync = (state: RoomState) => {
-    const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected, reconnecting: player.reconnecting, awaitingPosition: player.awaitingPosition, characterId:player.characterId, characterName:player.characterName, raceId:player.raceId, archetypeId:player.archetypeId, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, defense:player.defense, speed:player.speed, tokenUrl:player.tokenUrl, portraitUrl:player.portraitUrl, currentChamberId:player.currentChamberId, q:player.q, r:player.r, moveCooldownEndsAt:player.moveCooldownEndsAt, remainingSteps:player.remainingSteps, moveRevision:player.moveRevision, isHiddenByMaster:player.isHiddenByMaster }));
+    const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected, reconnecting: player.reconnecting, awaitingPosition: player.awaitingPosition, characterId:player.characterId, characterName:player.characterName, raceId:player.raceId, archetypeId:player.archetypeId, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, defense:player.defense, speed:player.speed, finalDex:player.finalDex, dodgeChance:player.dodgeChance, flatDr:player.flatDr, tokenUrl:player.tokenUrl, portraitUrl:player.portraitUrl, currentChamberId:player.currentChamberId, q:player.q, r:player.r, moveCooldownEndsAt:player.moveCooldownEndsAt, remainingSteps:player.remainingSteps, moveRevision:player.moveRevision, isHiddenByMaster:player.isHiddenByMaster }));
     const serialized = JSON.stringify(players);
     if (serialized !== lastPlayers) { lastPlayers = serialized; useGameStore.setState({ players }); }
     const own = state.players.get(useGameStore.getState().playerId);
@@ -40,9 +42,21 @@ function attach(room: Room<unknown, RoomState>) {
     useBoardStore.setState({ chambers: [...state.chambers.values()].map(c => c.toJSON()), monsters: [...state.monsters.values()].map(m => m.toJSON()), objects: [...state.objects.values()].map(o => o.toJSON()), activeStageId: state.activeStageId, explorationMode: state.explorationMode });
     const combat = state.combatState ? state.combatState.toJSON() as CombatSnapshot : emptyCombat;
     const previous = useCombatStore.getState().combat;
+    if (combat.active && !previous.active) useEconomyStore.setState({ shop: null, chest: null });
     useCombatStore.setState({ combat, ...(previous.turnToken !== combat.turnToken ? { pending: false } : {}), ...(!combat.active ? { selectedMonsterId: '' } : {}) });
   };
   room.onStateChange(sync);
+  room.onMessage('INVENTORY_SYNC', (snapshot: InventorySnapshot) => useEconomyStore.setState(s => ({ inventories: { ...s.inventories, [snapshot.playerId]: snapshot } })));
+  room.onMessage('SHOP_SYNC', (snapshot: ShopSnapshot) => useEconomyStore.setState({ shop: snapshot }));
+  room.onMessage('CHEST_SYNC', (snapshot: ChestSnapshot) => useEconomyStore.setState({ chest: snapshot }));
+  room.onMessage('CHAT_MESSAGE', (message: EphemeralChatMessage) => {
+    const now = Date.now() + useCombatStore.getState().serverClockOffset;
+    receiveChat(message, now);
+    if (message.expiresAt > now) setTimeout(() => expireChat(message.id), Math.min(CHAT_TTL_MS, message.expiresAt - now));
+  });
+  room.onMessage('DICE_RESULT', (result: DiceResult) => useEconomyStore.setState({ lastDice: result }));
+  room.onMessage('LOG_ENTRY', (entry: SessionLogEntry) => receiveLog([entry]));
+  room.onMessage('LOG_SYNC', (data: { entries: SessionLogEntry[] }) => receiveLog(data.entries, true));
   room.onMessage('CLOCK_SYNC', (data: { clientSentAt: number; serverNow: number }) => {
     const now = Date.now(), rtt = Math.max(0, now - data.clientSentAt);
     useCombatStore.setState({ serverClockOffset: data.serverNow + rtt / 2 - now });
@@ -94,6 +108,7 @@ function attach(room: Room<unknown, RoomState>) {
   room.onLeave(() => {
     if (active !== room) return;
     active = undefined;
+    useEconomyStore.setState({ ...initialEconomyState });
     if (heartbeat) clearInterval(heartbeat);
     useGameStore.setState({ connectionState: "DISCONNECTED", latencyMs: null });
     useUIStore.setState({ screen: "LOBBY", notice: kickedNotice || "Conexão encerrada. Você pode tentar continuar sua sessão." });
@@ -143,6 +158,7 @@ export async function leaveRoom(forget = false) {
   useGameStore.setState({ ...initialGameState });
   useBoardStore.setState({ ...initialBoardState });
   useCombatStore.setState({ ...initialCombatState });
+  useEconomyStore.setState({ ...initialEconomyState });
   useUIStore.setState({ screen: "LOBBY", notice: "" });
   await room?.leave();
 }

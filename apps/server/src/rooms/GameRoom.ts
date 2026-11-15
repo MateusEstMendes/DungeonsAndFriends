@@ -11,6 +11,8 @@ import { FovService } from "../services/fovService.js";
 import { loadBoard, readBoard } from "../services/boardRepository.js";
 import { MovementHandler } from "./handlers/movement.js";
 import { MasterHandler } from "./handlers/master.js";
+import { ShopHandler } from './handlers/shop.js';
+import { ChatAndLogHandler } from './handlers/chatAndLog.js';
 import { CombatHandler } from './handlers/combat.js';
 
 import { grantStarterKit } from "../db/seedEconomy.js";
@@ -29,6 +31,8 @@ export class GameRoom extends Room<{ state: RoomState }> {
   private fov!: FovService;
   private movement!: MovementHandler;
   private combat!: CombatHandler;
+  private shop!: ShopHandler;
+  private chatAndLog!: ChatAndLogHandler;
   constructor(private readonly services: RoomServices) { super(); }
 
   onCreate(options: { bootstrapKey?: string; roomCode?: string }) {
@@ -54,11 +58,22 @@ export class GameRoom extends Room<{ state: RoomState }> {
       this.restoreCharacter(player, saved.characterId);
       this.state.players.set(player.id, player);
     }
-    this.combat = new CombatHandler(this.state, this.services.database, record.id, (name, data, audience) => {
+    const chamberSend = (name: string, data: unknown, audience: string) => {
       for (const client of this.clients) {
         const p = this.state.players.get(this.bindings.get(client.sessionId) ?? '');
-        if (p?.role === 'MASTER' || (audience !== 'MASTER' && p && isCharacterPresent(p) && p.currentChamberId === audience)) client.send(name, data);
+        if (p?.connected && (p.role === 'MASTER' || (audience !== 'MASTER' && isCharacterPresent(p) && p.currentChamberId === audience))) client.send(name, data);
       }
+    };
+    this.chatAndLog = new ChatAndLogHandler(this.state, chamberSend);
+    this.shop = new ShopHandler(this.state, this.services.database, record.id, (playerId, name, data, includeMaster) => {
+      for (const client of this.clients) {
+        const p = this.state.players.get(this.bindings.get(client.sessionId) ?? '');
+        if (p?.connected && (p.id === playerId || (includeMaster && p.role === 'MASTER'))) client.send(name, data);
+      }
+    }, () => this.refreshViews());
+    this.combat = new CombatHandler(this.state, this.services.database, record.id, (name, data, audience) => {
+      chamberSend(name, data, audience);
+      if (name === 'COMBAT_EVENT') this.chatAndLog.recordCombat(data as import('@df/shared').CombatEvent, audience);
     }, () => this.refreshViews());
     this.combat.restore();
     for (const player of this.state.players.values()) this.combat.removePlayer(player.id);
@@ -74,6 +89,21 @@ export class GameRoom extends Room<{ state: RoomState }> {
         catch (error) { client.send("ACTION_ERROR", error instanceof Error && error.name !== "ZodError" ? error.message : "Comando inválido."); }
       });
     };
+    command('REQUEST_INVENTORY', false, (p, input) => this.shop.requestInventory(p, input ?? {}));
+    command('EQUIP_ITEM', false, (p, input) => this.shop.equipItem(p, input));
+    command('UNEQUIP_ITEM', false, (p, input) => this.shop.unequipItem(p, input));
+    command('USE_SCROLL', false, (p, input) => this.shop.useScroll(p, input));
+    command('OPEN_CHEST', false, (p, input) => this.shop.openChest(p, input));
+    command('LOOT_CHEST_ITEM', false, (p, input) => this.shop.lootChestItem(p, input));
+    command('OPEN_SHOP', false, (p, input) => this.shop.openShop(p, input));
+    command('BUY_ITEM', false, (p, input) => this.shop.buyItem(p, input));
+    command('SELL_ITEM', false, (p, input) => this.shop.sellItem(p, input));
+    command('MASTER_EDIT_SHOP', true, (p, input) => this.shop.editShop(p, input));
+    command('MASTER_EDIT_CHEST', true, (p, input) => this.shop.editChest(p, input));
+    command('MASTER_GRANT_ITEM', true, (p, input) => this.shop.grantItem(p, input));
+    command('CHAT_MESSAGE', false, (p, input) => this.chatAndLog.chat(p, input));
+    command('ROLL_DICE', false, (p, input) => this.chatAndLog.rollDice(p, input));
+    command('REQUEST_LOG', false, p => this.sendLog(p));
     command("REQUEST_MOVE", false, (p, input) => { this.movement.request(p, input); this.combat.proximity(p); });
     command('START_COMBAT', true, (_p, input) => this.combat.start(input));
     command('MASTER_SET_CHAMBER_BIOME', true, (_p, input) => master.biome(input));
@@ -184,6 +214,8 @@ export class GameRoom extends Room<{ state: RoomState }> {
     if (player.status === 'READY') this.movement.spawn(player);
     db.update(players).set({ sessionToken: auth.sessionToken, reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client, auth.sessionToken, player);
+    if (player.status === "READY") this.shop.syncInventory(player);
+    this.sendLog(player);
     this.refreshViews();
     if (this.state.combatState.active && (player.role === 'MASTER' || (isCharacterPresent(player) && player.currentChamberId === this.state.combatState.chamberId))) client.send('COMBAT_ROSTER', this.combat.snapshot());
     this.log("join", client);
@@ -201,6 +233,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
       characterId: character.id, characterName: character.name, raceId: character.raceId,
       archetypeId: character.archetypeId, hp: character.hp, maxHp: character.maxHp,
       mp: character.mp, maxMp: character.maxMp, defense: character.defense, speed: character.speed,
+      finalDex: character.finalDex, dodgeChance: character.dodgeChance, flatDr: character.flatDr,
       portraitUrl: `data:image/webp;base64,${character.portraitWebp}`,
       tokenUrl: `data:image/webp;base64,${character.tokenWebp}`, status: "READY",
       currentChamberId: character.currentChamberId, q: character.posQ, r: character.posR,
@@ -239,6 +272,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
       });
       this.syncCharacter(player, character);
       this.movement.spawn(player);
+      this.shop.syncInventory(player);
       this.refreshViews();
     } catch {
       client.send("ACTION_ERROR", "Não foi possível salvar a ficha. Tente novamente.");
@@ -268,7 +302,10 @@ export class GameRoom extends Room<{ state: RoomState }> {
       target.send("APPROVAL_RESULT", player.status);
       if (approve) this.credentials(target);
     }
-    if (approve) this.notifyCombat(player);
+    if (approve) {
+      if (player.characterId) this.shop.syncInventory(player);
+      this.sendLog(player); this.notifyCombat(player);
+    }
     this.log(approve ? "approve" : "reject", client);
   }
 
@@ -282,6 +319,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     const player = this.state.players.get(targetPlayerId);
     if (!player || player.role !== 'PLAYER' || !player.characterId) throw new Error('Selecione um personagem.');
     this.combat.removePlayer(player.id);
+    this.shop.disconnect(player.id);
     this.services.database.db.update(players).set({ approvalStatus: 'PENDING_APPROVAL', reconnectionToken: null, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     player.connected = false; player.reconnecting = false; player.status = 'PENDING_APPROVAL';
     for (const [sessionId, id] of this.bindings) if (id === player.id) {
@@ -315,6 +353,8 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.refreshViews();
     this.services.database.db.update(players).set({ reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client);
+    if (player.status === "READY") this.shop.syncInventory(player);
+    this.sendLog(player);
     if (this.state.combatState.active && (player.role === 'MASTER' || (isCharacterPresent(player) && player.currentChamberId === this.state.combatState.chamberId))) client.send('COMBAT_ROSTER', this.combat.snapshot());
     this.log("reconnect", client);
   }
@@ -324,6 +364,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
     if (player) {
       player.connected = false;
       player.reconnecting = false;
+      this.shop.disconnect(player.id);
       this.combat.removePlayer(player.id);
       this.services.database.db.update(players).set({ reconnectionToken: null, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
       // Cancelar a espera libera o nome para uma nova tentativa.
@@ -338,6 +379,9 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.heartbeats.delete(client.sessionId);
     this.refreshViews();
     client.view?.dispose();
+  }
+  private sendLog(player: PlayerSchema) {
+    for (const client of this.clients) if (this.bindings.get(client.sessionId) === player.id) client.send('LOG_SYNC', { entries: this.chatAndLog.history(player) });
   }
   private refreshViews() { this.fov.refresh(this.clients, client => this.bindings.get(client.sessionId)); }
   private log(event: string, client: Client, rttMs?: number) {

@@ -384,4 +384,58 @@ describe.sequential("sala autoritativa", () => {
     await restored.leave(); await referee.leave();
   });
 
+  it('serializes shared chest/shop races and keeps inventory, chat and dice scoped to authorized recipients', async () => {
+    const saved = database.db.select().from(players).all();
+    const anaRecord = saved.find(p => p.name === 'Ana')!, companionRecord = saved.find(p => p.name === 'Companheiro')!;
+    const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const ana = await testServer.connectTo(room, { name: 'Ana', sessionToken: anaRecord.sessionToken, ...version });
+    const companion = await testServer.connectTo(room, { name: companionRecord.name, sessionToken: companionRecord.sessionToken, ...version });
+    const remote = await testServer.connectTo(room, { name: 'Economia Remota', ...version });
+    const observer = [...room.state.players.values()].find(p => p.name === 'Economia Remota')!;
+    try {
+      master.send('APPROVE_PLAYER', { targetPlayerId: observer.id }); await until(() => observer.status === 'NEEDS_CHARACTER_CREATION');
+      const readyInventory = remote.waitForMessage('INVENTORY_SYNC');
+      remote.send('SUBMIT_CHARACTER', characterPayload()); await readyInventory; await until(() => observer.status === 'READY');
+      master.send('MASTER_MOVE_ENTITY', { entityId: observer.id, chamberId: 'training-2', q: -3, r: 0 });
+      master.send('MASTER_MOVE_ENTITY', { entityId: anaRecord.id, chamberId: 'training-1', q: -2, r: -2 });
+      master.send('MASTER_MOVE_ENTITY', { entityId: companionRecord.id, chamberId: 'training-1', q: 1, r: 1 });
+      master.send('MASTER_MOVE_ENTITY', { entityId: anaRecord.id, chamberId: 'training-1', q: 0, r: 0 });
+      await until(() => observer.currentChamberId === 'training-2' && room.state.players.get(anaRecord.id)!.q === 0 && room.state.players.get(companionRecord.id)!.q === 1);
+      master.send('MASTER_EDIT', { layer: 'OBJECT', chamberId: 'training-1', q: 0, r: 1, kind: 'CHEST', rotation: 0, hidden: false });
+      master.send('MASTER_EDIT', { layer: 'OBJECT', chamberId: 'training-1', q: 1, r: 0, kind: 'NPC_MERCHANT', rotation: 0, hidden: false });
+      await until(() => [...room.state.objects.values()].some(o => o.kind === 'NPC_MERCHANT' && o.q === 1 && o.r === 0));
+      const chest = [...room.state.objects.values()].find(o => o.kind === 'CHEST' && o.q === 0 && o.r === 1)!, shop = [...room.state.objects.values()].find(o => o.kind === 'NPC_MERCHANT')!;
+      const edited = master.waitForMessage('CHEST_SYNC'); master.send('MASTER_EDIT_CHEST', { chestId: chest.id, gold: 0, items: [{ itemId: 'DAGGER', quantity: 1 }] }); await edited;
+      const inventories = [[], [], []] as import('@df/shared').InventorySnapshot[][];
+      const chats = [[], [], [], []] as import('@df/shared').EphemeralChatMessage[][];
+      const logs = [[], [], [], []] as import('@df/shared').SessionLogEntry[][];
+      const clients = [ana, companion, remote, master];
+      clients.forEach((client, i) => {
+        client.onMessage('CHAT_MESSAGE', message => chats[i].push(message));
+        client.onMessage('LOG_ENTRY', entry => logs[i].push(entry));
+        client.onMessage('DICE_RESULT', () => {});
+        if (i < 3) client.onMessage('INVENTORY_SYNC', snapshot => inventories[i].push(snapshot));
+      });
+      const errors: string[] = [];
+      ana.onMessage('ACTION_ERROR', error => errors.push(error)); companion.onMessage('ACTION_ERROR', error => errors.push(error));
+      ana.send('LOOT_CHEST_ITEM', { chestId: chest.id, kind: 'ITEM', itemId: 'DAGGER', quantity: 1 });
+      companion.send('LOOT_CHEST_ITEM', { chestId: chest.id, kind: 'ITEM', itemId: 'DAGGER', quantity: 1 });
+      await until(() => errors.length === 1 && inventories[0].length + inventories[1].length === 1);
+      expect(database.sqlite.prepare("SELECT items_json FROM chests WHERE object_id = ?").get(chest.id)).toEqual({ items_json: '[]' });
+      expect(database.sqlite.prepare("SELECT SUM(quantity) count FROM inventories WHERE item_id='DAGGER'").get()).toEqual({ count: 1 });
+      const editedShop = master.waitForMessage('SHOP_SYNC'); master.send('MASTER_EDIT_SHOP', { shopId: shop.id, npcName: 'Mercador', dialogue: 'Olá', inventory: [{ itemId: 'DAGGER', stock: 1 }] }); await editedShop;
+      ana.send('BUY_ITEM', { shopId: shop.id, itemId: 'DAGGER', quantity: 1 }); companion.send('BUY_ITEM', { shopId: shop.id, itemId: 'DAGGER', quantity: 1 });
+      await until(() => errors.length === 2 && inventories[0].length + inventories[1].length === 2);
+      expect(database.sqlite.prepare("SELECT SUM(quantity) count FROM inventories WHERE item_id='DAGGER'").get()).toEqual({ count: 2 });
+      expect(JSON.parse((database.sqlite.prepare('SELECT inventory_json FROM npc_shops WHERE object_id = ?').get(shop.id) as { inventory_json: string }).inventory_json)[0].stock).toBe(0);
+      inventories[0].forEach(e => expect(e.playerId).toBe(anaRecord.id)); inventories[1].forEach(e => expect(e.playerId).toBe(companionRecord.id)); expect(inventories[2]).toEqual([]);
+      const privateError = remote.waitForMessage('ACTION_ERROR'); remote.send('REQUEST_INVENTORY', { targetPlayerId: anaRecord.id }); await privateError;
+      ana.send('CHAT_MESSAGE', { text: '  Mensagem efêmera  ' }); ana.send('ROLL_DICE', { faces: 20 });
+      await until(() => chats[0].length === 1 && chats[1].length === 1 && chats[3].length === 1 && logs[0].some(e => e.type === 'DICE') && logs[1].some(e => e.type === 'DICE') && logs[3].some(e => e.type === 'DICE'));
+      expect(chats[2]).toEqual([]); expect(logs[2]).toEqual([]);
+      expect(chats[0][0].expiresAt - chats[0][0].createdAt).toBe(7000); expect(chats[0][0].text).toBe('Mensagem efêmera');
+      const log = master.waitForMessage('LOG_SYNC'); master.send('REQUEST_LOG'); expect((await log).entries.some((e: import('@df/shared').SessionLogEntry) => e.type === 'DICE')).toBe(true);
+    } finally { await ana.leave(); await companion.leave(); await remote.leave(); await master.leave(); }
+  }, 20_000);
+
 });

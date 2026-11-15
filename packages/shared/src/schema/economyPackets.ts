@@ -9,6 +9,7 @@ const gold = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 export const ItemIdSchema = z.enum(ITEM_IDS);
 export const SpellIdSchema = z.enum(SPELL_IDS);
 export const EquipmentSlotSchema = z.enum(['MAIN_HAND', 'OFF_HAND', 'ARMOR']);
+export const RequestInventorySchema = z.strictObject({ targetPlayerId: id.optional() });
 export const EquipItemSchema = z.strictObject({ inventoryId: id, slot: EquipmentSlotSchema });
 export const UnequipItemSchema = z.strictObject({ slot: EquipmentSlotSchema });
 export const UseScrollSchema = z.strictObject({ inventoryId: id });
@@ -33,8 +34,8 @@ export const MasterGrantItemSchema = z.discriminatedUnion('kind', [
 export const MasterSetMonsterAiSchema = z.strictObject({ monsterId: id, isAutoMode: z.boolean(), allowAutoFlee: z.boolean() });
 export const MasterSetGlobalAiSchema = z.strictObject({ enabled: z.boolean() });
 export const CHAT_TTL_MS = 7000;
-export const ChatMessageSchema = z.strictObject({ text: z.string().trim().min(1).max(200).regex(/^[^\u0000-\u001f\u007f]+$/, 'Mensagem contém caracteres de controle.') });
-export const RollDiceSchema = z.strictObject({ faces: z.union([z.literal(4), z.literal(6), z.literal(8), z.literal(10), z.literal(12), z.literal(20), z.literal(100)]) });
+export const ChatMessageSchema = z.strictObject({ text: z.string().trim().min(1).max(200).regex(/^[^\u0000-\u001f\u007f]+$/, 'Mensagem contém caracteres de controle.'), chamberId: id.optional() });
+export const RollDiceSchema = z.strictObject({ chamberId: id.optional(), faces: z.union([z.literal(4), z.literal(6), z.literal(8), z.literal(10), z.literal(12), z.literal(20), z.literal(100)]) });
 export const CombatActionSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('ATTACK'), subType: z.enum([...PHYSICAL_ATTACKS, ...MAGICAL_ATTACKS]), targetId: id, hand: z.enum(['MAIN', 'OFF']).optional() }),
   z.strictObject({ type: z.literal('SPELL'), spellId: SpellIdSchema, targetId: id }),
@@ -44,7 +45,7 @@ export const CombatActionSchema = z.discriminatedUnion('type', [
 ]);
 /** Command registry for the handlers introduced in the next increments. */
 export const ECONOMY_COMMAND_SCHEMAS = {
-  EQUIP_ITEM: EquipItemSchema, UNEQUIP_ITEM: UnequipItemSchema, USE_SCROLL: UseScrollSchema,
+  REQUEST_INVENTORY: RequestInventorySchema, EQUIP_ITEM: EquipItemSchema, UNEQUIP_ITEM: UnequipItemSchema, USE_SCROLL: UseScrollSchema,
   OPEN_CHEST: OpenChestSchema, LOOT_CHEST_ITEM: LootChestItemSchema, OPEN_SHOP: OpenShopSchema,
   BUY_ITEM: BuyItemSchema, SELL_ITEM: SellItemSchema, MASTER_EDIT_SHOP: MasterEditShopSchema,
   MASTER_EDIT_CHEST: MasterEditChestSchema, MASTER_GRANT_ITEM: MasterGrantItemSchema,
