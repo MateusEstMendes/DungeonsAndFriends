@@ -9,6 +9,7 @@
   "scripts": {
     "test:combat": "vitest run packages/shared/src/combat apps/server/tests/combat.test.ts apps/server/tests/dice.test.ts",
     "test:combat-sim": "pnpm --filter @df/shared build && pnpm --filter @df/server test:combat-sim",
+    "test:appearance": "pnpm --filter @df/shared build && pnpm --filter @df/client dev --mode appearance --port 5180 --strictPort --open /",
     "dev": "pnpm --filter @df/shared build && pnpm --parallel --filter @df/client --filter @df/server run dev",
     "build": "pnpm -r build",
     "test": "vitest run",

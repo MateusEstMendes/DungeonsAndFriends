@@ -10,10 +10,12 @@ const attrNames:Record<AttributeId,string>={str:'Força',dex:'Destreza',con:'Con
 const attrShort:Record<AttributeId,string>={str:'FOR',dex:'DES',con:'CON',int:'INT',wis:'SAB',cha:'CAR'};
 const tabs=['Origem','Atributos','Aparência'];
 const signed=(n:number)=>n>=0?`+${n}`:String(n);
-export function CharacterCreatorScreen(){
- const roomCode=useGameStore(s=>s.roomCode),connected=useGameStore(s=>s.connectionState==='CONNECTED');
+export function CharacterCreatorScreen({appearancePreview=false}:{appearancePreview?:boolean}={}){
+ const currentRoomCode=useGameStore(s=>s.roomCode),connected=useGameStore(s=>s.connectionState==='CONNECTED');
+ const roomCode=appearancePreview?'appearance_preview':currentRoomCode;
+ const [exports,setExports]=useState<{portraitBase64:string;tokenBase64:string}|null>(null);
  const [draft,setDraft]=useState<CharacterDraft>(()=>loadDraft(roomCode));
- const [tab,setTab]=useState(0),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[saveWarning,setSaveWarning]=useState(false),[retry,setRetry]=useState(0);
+ const [tab,setTab]=useState(appearancePreview?2:0),[ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[saveWarning,setSaveWarning]=useState(false),[retry,setRetry]=useState(0);
  const host=useRef<HTMLDivElement>(null),renderer=useRef<ModularRenderer|null>(null),latest=useRef(draft); latest.current=draft;
  const touch=useRef<{x:number;y:number}|null>(null);
  const mounted=useRef(true);
@@ -33,6 +35,17 @@ export function CharacterCreatorScreen(){
  const missingBonus=draft.raceId==='HUMAN'&&!draft.humanBonusAttribute;
  function chooseRace(raceId:RaceId){setDraft(d=>({...d,raceId,humanBonusAttribute:undefined,visualConfig:racePreset(raceId)}));}
  function changeAttr(key:AttributeId,delta:number){setDraft(d=>({...d,baseAttributes:{...d.baseAttributes,[key]:d.baseAttributes[key]+delta}}));}
+ async function previewExport(){
+  if(busy||!ready||!renderer.current)return;
+  setBusy(true);setError('');setExports(null);
+  try{
+   const current=latest.current;
+   await renderer.current.update(current.raceId,current.visualConfig);
+   const images=await exportCharacter(renderer.current);
+   if(mounted.current)setExports(images);
+  }catch(e){if(mounted.current)setError(e instanceof Error?e.message:'Falha ao exportar aparência.');}
+  finally{if(mounted.current)setBusy(false);}
+ }
  async function conclude(){
   if(busy||!renderer.current||missingBonus)return;
   setBusy(true);setError('');
@@ -47,6 +60,7 @@ export function CharacterCreatorScreen(){
   finally{if(mounted.current)setBusy(false);}
  }
  return <section className="creator" aria-label="Criação de personagem">
+  {appearancePreview&&<div className="appearance-preview-notice" role="status"><strong>Teste local de aparência</strong><span>Sem sala ou servidor do jogo. Edite as peças e cores; o rascunho fica salvo neste navegador.</span></div>}
   <header className="creator-heading"><span className="eyebrow">O início da sua lenda</span><h1>Dê vida ao seu <em>aventureiro</em></h1><p>Uma origem. Uma vocação. Uma história que só você pode contar.</p></header>
   <div className="creator-layout">
    <aside className="character-preview"><div className="portrait-frame"><span className="frame-star" aria-hidden="true">✧</span><div ref={host} className="portrait-canvas" role="img" aria-label={`Retrato de ${draft.name}, ${RACES[draft.raceId].name}`}/>{!ready&&<span className="preview-loading">Preparando retrato…</span>}<div className="portrait-caption"><span className="eyebrow">{RACES[draft.raceId].name} · {ARCHETYPES[draft.archetypeId].name}</span><h2>{draft.name||'Seu aventureiro'}</h2></div></div>
@@ -66,10 +80,15 @@ export function CharacterCreatorScreen(){
     {tab===1&&<><div className="section-title"><h2>Forje seus atributos</h2><span className="point-budget" aria-live="polite">{pointBuy.remaining} / 27 disponíveis</span></div><p className="muted">Todos começam em 8. Os valores 14 e 15 custam 2 pontos por incremento.</p><div className="attribute-head"><span>Atributo base</span><span>Final · Mod.</span></div>{ATTRIBUTE_IDS.map(key=><div className="attribute-row" key={key}><label htmlFor={`base-${key}`}><b>{attrShort[key]}</b><span>{attrNames[key]}</span></label><div className="point-controls"><button aria-label={`Diminuir ${attrNames[key]}`} disabled={draft.baseAttributes[key]<=8} onClick={()=>changeAttr(key,-1)}>−</button><output id={`base-${key}`}>{draft.baseAttributes[key]}</output><button aria-label={`Aumentar ${attrNames[key]}`} disabled={!canIncrementAttribute(draft.baseAttributes[key],pointBuy.remaining)} onClick={()=>changeAttr(key,1)}>+</button></div><div className="final-attribute"><strong>{final[key]}</strong><small>{signed(getModifier(final[key]))}</small></div></div>)}
      {draft.raceId==='HUMAN'&&<label className="human-bonus">Adaptabilidade · +1 em um atributo à escolha<select value={draft.humanBonusAttribute??''} onChange={e=>setDraft({...draft,humanBonusAttribute:e.target.value as AttributeId})}><option value="" disabled>Escolha seu atributo extra</option>{ATTRIBUTE_IDS.map(key=><option key={key} value={key}>{attrNames[key]}</option>)}</select></label>}
      <p className="muted">Bônus raciais são aplicados depois da compra e não consomem pontos.</p></>}
-    {tab===2&&<><div className="section-title"><h2>Uma face para sua lenda</h2><span>Preview em tempo real</span></div><div className="piece-grid">{(Object.keys(LAYER_OPTIONS) as LayerId[]).filter(id=>id!=='30_ears'&&(id!=='80_horns'||draft.raceId==='DEMON'||draft.raceId==='HALF_DRAGON')).map(id=><label key={id}>{LAYER_LABELS[id]}<select value={draft.visualConfig.layers[id]} onChange={e=>setDraft({...draft,visualConfig:{...draft.visualConfig,layers:{...draft.visualConfig.layers,[id]:e.target.value}}})}>{LAYER_OPTIONS[id].map(option=><option key={option} value={option}>{OPTION_LABELS[option]}</option>)}</select></label>)}</div><h2>Paleta do personagem</h2><div className="color-grid">{Object.entries({skin:'Pele',hair:'Cabelo e barba',eyes:'Íris',details:'Marcas e escamas',horns:'Chifres'}).map(([key,label])=><label key={key}><input type="color" aria-label={label} value={draft.visualConfig.colors[key]} onChange={e=>setDraft({...draft,visualConfig:{...draft.visualConfig,colors:{...draft.visualConfig.colors,[key]:e.target.value}}})}/><span>{label}<small>{draft.visualConfig.colors[key]}</small></span></label>)}</div><button className="reset-appearance" onClick={()=>setDraft({...draft,visualConfig:racePreset(draft.raceId)})}>Restaurar aparência da raça</button></>}
+    {tab===2&&<>{appearancePreview&&<label>Raça para testar<select value={draft.raceId} onChange={e=>{chooseRace(e.target.value as RaceId);setExports(null);}}>{RACE_IDS.map(id=><option key={id} value={id}>{RACES[id].name}</option>)}</select></label>}<div className="section-title"><h2>Uma face para sua lenda</h2><span>Preview em tempo real</span></div><div className="piece-grid">{(Object.keys(LAYER_OPTIONS) as LayerId[]).filter(id=>id!=='30_ears'&&(id!=='80_horns'||draft.raceId==='DEMON'||draft.raceId==='HALF_DRAGON')).map(id=><label key={id}>{LAYER_LABELS[id]}<select value={draft.visualConfig.layers[id]} onChange={e=>setDraft({...draft,visualConfig:{...draft.visualConfig,layers:{...draft.visualConfig.layers,[id]:e.target.value}}})}>{LAYER_OPTIONS[id].map(option=><option key={option} value={option}>{OPTION_LABELS[option]}</option>)}</select></label>)}</div><h2>Paleta do personagem</h2><div className="color-grid">{Object.entries({skin:'Pele',hair:'Cabelo e barba',eyes:'Íris',details:'Marcas e escamas',horns:'Chifres'}).map(([key,label])=><label key={key}><input type="color" aria-label={label} value={draft.visualConfig.colors[key]} onChange={e=>setDraft({...draft,visualConfig:{...draft.visualConfig,colors:{...draft.visualConfig.colors,[key]:e.target.value}}})}/><span>{label}<small>{draft.visualConfig.colors[key]}</small></span></label>)}</div><button className="reset-appearance" onClick={()=>setDraft({...draft,visualConfig:racePreset(draft.raceId)})}>Restaurar aparência da raça</button></>}
     </div></fieldset>
     {error&&<div className="creator-error" role="alert">{error}{!ready&&<button onClick={()=>{setError('');setRetry(n=>n+1);}}>Tentar preview novamente</button>}</div>}
-    <div className="creator-bottom"><span>{saveWarning?'Seu navegador não permitiu salvar o rascunho.':'Rascunho salvo neste navegador'}</span><div className="step-actions">{tab>0&&<button disabled={busy} onClick={()=>setTab(tab-1)}>Voltar</button>}{tab<2?<button className="primary" onClick={()=>setTab(tab+1)}>Continuar <span aria-hidden="true">→</span></button>:<button className="primary" disabled={!ready||busy||!connected||!pointBuy.valid||!draft.name.trim()||missingBonus} onClick={()=>void conclude()}>{busy?'Salvando ficha…':'Concluir Ficha e Entrar na Masmorra'}</button>}</div>{tab===2&&missingBonus&&<button className="bonus-reminder" onClick={()=>setTab(1)}>Escolha seu bônus humano na aba Atributos.</button>}</div>
+    <div className="creator-bottom"><span>{saveWarning?'Seu navegador não permitiu salvar o rascunho.':'Rascunho salvo neste navegador'}</span><div className="step-actions">{tab>0&&<button disabled={busy} onClick={()=>setTab(tab-1)}>Voltar</button>}{tab<2?<button className="primary" onClick={()=>setTab(tab+1)}>Continuar <span aria-hidden="true">→</span></button>:appearancePreview?<button className="primary" disabled={!ready||busy} onClick={()=>void previewExport()}>{busy?'Exportando…':'Exportar retrato e token'}</button>:<button className="primary" disabled={!ready||busy||!connected||!pointBuy.valid||!draft.name.trim()||missingBonus} onClick={()=>void conclude()}>{busy?'Salvando ficha…':'Concluir Ficha e Entrar na Masmorra'}</button>}</div>{tab===2&&!appearancePreview&&missingBonus&&<button className="bonus-reminder" onClick={()=>setTab(1)}>Escolha seu bônus humano na aba Atributos.</button>}</div>
+    {appearancePreview&&exports&&<div className="appearance-preview-exports" aria-label="Imagens exportadas">
+     <p>Exportação concluída. Estas imagens representam a aparência no momento da exportação.</p>
+     <a href={exports.portraitBase64} download="retrato.webp"><img src={exports.portraitBase64} alt="Retrato exportado" width={192} height={192}/>Baixar retrato · 512 × 512</a>
+     <a href={exports.tokenBase64} download="token.webp"><img src={exports.tokenBase64} alt="Token exportado" width={128} height={128}/>Baixar token · 128 × 128</a>
+    </div>}
    </div>
   </div>
  </section>;

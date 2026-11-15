@@ -187,10 +187,23 @@ Acesse `http://localhost:5173`. O servidor roda em `http://localhost:2567`, e o 
 
 Na versão compilada, o servidor entrega o cliente pela mesma origem, além dos endpoints `GET /health` e `GET /api/host-info`.
 
+### Testar aparência sem iniciar o jogo
+
+Se já houver uma instância anterior do visualizador aberta, encerre-a com **Ctrl+C** antes de executar o comando novamente.
+
+```bash
+pnpm test:appearance
+```
+
+O comando compila o pacote compartilhado e abre automaticamente `http://localhost:5180/` no criador, direto na aba **Aparência**. Só o visualizador local é iniciado: não precisa de backend, banco, sala ou aprovação do Mestre. Se o ambiente remoto não abrir o navegador, acesse a URL exibida no terminal. Toda entrada desse visualizador abre a aparência, mesmo sem parâmetros na URL. A porta 5180 deve estar livre; o comando informa se já estiver em uso.
+
+Troque entre as oito raças, ajuste peças e cores e use **Exportar retrato e token** para conferir e baixar as imagens WebP usadas pelo jogo. O teste usa o mesmo renderizador da criação normal, guarda um rascunho separado no navegador e atualiza automaticamente ao editar o código. Encerre com **Ctrl+C**. Esse modo está disponível apenas em desenvolvimento.
+
 ### Comandos disponíveis
 
 | Comando | Descrição |
 | --- | --- |
+| `pnpm test:appearance` | Abre o teste visual de aparência sem servidor do jogo |
 | `pnpm dev` | Inicia cliente e servidor em desenvolvimento |
 | `pnpm start:host` | Compila o projeto e inicia o host com túnel público |
 | `pnpm build` | Compila os pacotes e as aplicações |

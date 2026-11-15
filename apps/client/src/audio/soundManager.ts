@@ -1,5 +1,5 @@
 import { Howl, Howler } from 'howler';
-import sprite from '../../public/audio/sfx-sprite.json';
+import sprite from './sfx-sprite.json';
 import { useAudioStore } from '../store/useAudioStore';
 export type Sfx = keyof typeof sprite;
 export type Bgm = 'bgm_exploration' | 'bgm_combat_pov';

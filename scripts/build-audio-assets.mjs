@@ -5,6 +5,8 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import ffmpeg from 'ffmpeg-static';
 const rate = 44100, out = resolve('apps/client/public/audio');
+const metadataOut = resolve('apps/client/src/audio');
+mkdirSync(metadataOut, { recursive: true });
 mkdirSync(out, { recursive: true });
 let seed = 12345;
 const noise = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2147483648 - 1; };
@@ -50,7 +52,7 @@ try {
     }
     samples.push(...new Array(rate / 2).fill(0)); // 500ms silence for iOS sprite boundaries.
   }
-  encode('sfx-sprite', samples); writeFileSync(join(out, 'sfx-sprite.json'), JSON.stringify(sprite, null, 2) + '\n');
+  encode('sfx-sprite', samples); writeFileSync(join(metadataOut, 'sfx-sprite.json'), JSON.stringify(sprite, null, 2) + '\n');
   for (const combat of [false, true]) {
     const duration = 16, samples = new Float32Array(rate * duration), notes = combat ? [110, 130.8128, 164.8138, 146.8324] : [130.8128, 164.8138, 195.9977, 164.8138];
     for (let i = 0; i < samples.length; i++) {

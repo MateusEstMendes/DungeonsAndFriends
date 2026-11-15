@@ -16,7 +16,7 @@ vi.mock('howler', () => ({
 import { crossfadeBgm, initializeAudio } from '../src/audio/soundManager';
 import { useAudioStore } from '../src/store/useAudioStore';
 import { combatSfx } from '../src/audio/events';
-import sprite from '../public/audio/sfx-sprite.json';
+import sprite from '../src/audio/sfx-sprite.json';
 let cleanup: (() => void) | undefined;
 afterEach(() => { cleanup?.(); cleanup = undefined; vi.useRealTimers(); vi.unstubAllGlobals(); mocks.howls.length = 0; });
 it('unlocks from a gesture, cancels stale crossfade stops on rapid scene changes and resumes visibility', async () => {
