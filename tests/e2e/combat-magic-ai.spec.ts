@@ -34,8 +34,10 @@ test('grimório real, área JRPG e controle global/misto por turnos', async ({ b
     await expect(player.locator('.combat-dice-status strong')).toContainText('Goblin:');
     await expect(player.locator('.combat-dice-status strong')).toContainText('Esqueleto Guerreiro:');
     await player.getByRole('button', { name: 'Atacar', exact: true }).click(); await player.getByRole('button', { name: /Dardo Arcano/ }).click();
-    await expect(player.locator('.combat-log')).toContainText('Monstro Goblin ataca Ael de Teste');
-    await expect(player.locator('.combat-log')).toContainText('Monstro Esqueleto Guerreiro ataca Ael de Teste');
+    await player.getByRole('button', { name: '📜 Log', exact: true }).click();
+    await expect(player.getByRole('dialog', { name: 'Log da aventura' })).toContainText('Monstro Goblin ataca Ael de Teste');
+    await expect(player.getByRole('dialog', { name: 'Log da aventura' })).toContainText('Monstro Esqueleto Guerreiro ataca Ael de Teste');
+    await player.getByRole('button', { name: 'Fechar janela', exact: true }).click();
     await expect(player.locator('.combat-heading h1')).toHaveText('Rodada 2');
     await expect(gm.locator('.combat-heading')).toContainText('Observando turno de Ael de Teste');
     await gm.getByText('Controlar monstro', { exact: true }).click(); await gm.getByLabel('IA de Goblin', { exact: true }).click(); await expect(gm.getByLabel('IA de Goblin', { exact: true })).not.toBeChecked();
@@ -46,6 +48,7 @@ test('grimório real, área JRPG e controle global/misto por turnos', async ({ b
     await expect(player.locator('.combat-heading h1')).toHaveText('Rodada 3');
     await player.screenshot({ path: '.local/phase5-magic-ai.png' }); expect(errors).toEqual([]);
     await gm.getByLabel('IA Global', { exact: true }).click(); await expect(gm.getByLabel('IA Global', { exact: true })).not.toBeChecked(); await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).click();
+    await player.getByRole('button', { name: 'Sair', exact: true }).click(); await gm.getByRole('button', { name: 'Sair', exact: true }).click();
   } finally {
     try { if (!gm.isClosed() && await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).isVisible() && await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).isEnabled()) await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).click(); } catch { /* Preserve the original test failure while closing an interrupted browser. */ }
     await context.close().catch(() => {}); await gmContext.close().catch(() => {});

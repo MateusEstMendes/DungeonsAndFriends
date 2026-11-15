@@ -22,6 +22,11 @@ test('proximidade, arena sincronizada, ações extras e soberania do Mestre em m
   await player.goto('/'); await player.getByRole('button', { name: 'Continuar sessão' }).click();
   await player.getByText('Mover por coordenadas', { exact: true }).click();
   const form = player.locator('.vitals-hud .coordinate-form');
+  // Re-enter proximity from outside it, independently of the previous encounter's alert signature.
+  await form.getByLabel('q', { exact: true }).fill('0'); await form.getByLabel('r', { exact: true }).fill('0');
+  await form.getByRole('button', { name: 'Mover', exact: true }).click();
+  await expect(player.getByText('Hexágono (0, 0)', { exact: true })).toBeVisible();
+  await expect(form.getByRole('button', { name: 'Mover', exact: true })).toBeEnabled();
   await form.getByLabel('q', { exact: true }).fill('3'); await form.getByLabel('r', { exact: true }).fill('-1');
   await form.getByRole('button', { name: 'Mover', exact: true }).click();
   await expect(gm.getByText('[Inimigo próximo! Iniciar Combate]', { exact: true })).toBeVisible();

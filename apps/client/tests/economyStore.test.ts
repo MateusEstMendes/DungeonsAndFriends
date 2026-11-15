@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import type { EphemeralChatMessage, SessionLogEntry } from '@df/shared';
-import { useEconomyStore, initialEconomyState, receiveChat, expireChat, receiveLog } from '../src/store/useEconomyStore';
+import { useEconomyStore, initialEconomyState, receiveChat, expireChat, receiveLog, requestEconomyObject, closeEconomyObject, receiveShop, receiveChest } from '../src/store/useEconomyStore';
 afterEach(() => useEconomyStore.setState({ ...initialEconomyState }));
 const chat: EphemeralChatMessage = { id: 'first', actorId: 'a', actorName: 'Ael', actorKind: 'PLAYER', chamberId: 'room', text: 'Olá', createdAt: 1000, expiresAt: 8000 };
 it('keeps only current speech per actor and cannot expire a replacement bubble with an old timer', () => {
@@ -15,4 +15,23 @@ it('merges logs chronologically without duplicates, bounds history and replaces 
   expect(useEconomyStore.getState().log.map(e => e.id)).toEqual(['a', 'b']);
   receiveLog(Array.from({ length: 250 }, (_, i) => entry(String(i), 3000 + i))); expect(useEconomyStore.getState().log).toHaveLength(200);
   receiveLog([entry('reconnected', 1)], true); expect(useEconomyStore.getState().log.map(e => e.id)).toEqual(['reconnected']);
+});
+
+it('ignores shop broadcasts after dismissal and replies for a different requested object', () => {
+  const shop = { shopId: 'a', npcName: 'Mercador', dialogue: '', inventory: [], canEdit: false };
+  requestEconomyObject('SHOP', 'a'); receiveShop(shop);
+  expect(useEconomyStore.getState().shop).toEqual(shop);
+  closeEconomyObject('SHOP'); receiveShop({ ...shop, dialogue: 'Estoque atualizado' });
+  expect(useEconomyStore.getState().shop).toBeNull();
+  requestEconomyObject('SHOP', 'b'); receiveShop(shop);
+  expect(useEconomyStore.getState().shop).toBeNull();
+  receiveShop({ ...shop, shopId: 'b' }); expect(useEconomyStore.getState().shop?.shopId).toBe('b');
+});
+it('switches object views exclusively and ignores a delayed chest reply after closing', () => {
+  requestEconomyObject('SHOP', 'a');
+  requestEconomyObject('CHEST', 'c'); receiveChest({ chestId: 'c', gold: 10, items: [], canEdit: false });
+  expect(useEconomyStore.getState().activeShopId).toBeNull();
+  expect(useEconomyStore.getState().chest?.gold).toBe(10);
+  closeEconomyObject('CHEST'); receiveChest({ chestId: 'c', gold: 0, items: [], canEdit: false });
+  expect(useEconomyStore.getState().chest).toBeNull();
 });

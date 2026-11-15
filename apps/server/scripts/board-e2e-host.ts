@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { openDatabase } from "../src/db/index.js";
 import { prepareHost } from "../src/host.js";
-import { characters, placedObjects, players } from "../src/db/schema.js";
+import { characters, placedObjects, players, chests } from "../src/db/schema.js";
 import { prepareCharacter, signSessionToken } from "../src/rooms/handlers/auth.js";
 import { characterPayload } from "../../../packages/shared/tests/characterFixture.js";
 // Dedicated disposable database; never touches apps/server/dungeons.db.
@@ -21,5 +21,12 @@ const character = database.db.insert(characters).values({ ...prepareCharacter(ch
 database.db.insert(placedObjects).values({ id: 'combat-goblin', chamberId: 'training-1', kind: 'MONSTER', name: 'Goblin', q: 3, r: -2 }).run();
 database.sqlite.prepare("UPDATE players SET character_id = ? WHERE id = ?").run(character.id, playerId);
 writeFileSync(".local/e2e-player.json", JSON.stringify({ roomCode: room.code, name, token, databasePath: process.env.DATABASE_PATH, characterId: character.id }));
+database.db.insert(placedObjects).values([
+  { id: 'economy-chest', chamberId: 'training-1', kind: 'CHEST', name: 'Baú de teste', q: 0, r: 1 },
+  { id: 'economy-shop', chamberId: 'training-1', kind: 'NPC_MERCHANT', name: 'Mercador de teste', q: 0, r: 1 },
+]).run();
+database.db.insert(chests).values({ objectId: 'economy-chest', gold: 200, itemsJson: JSON.stringify([
+  { itemId: 'GREAT_SWORD', quantity: 1 }, { itemId: 'WOODEN_SHIELD', quantity: 1 }, { itemId: 'SPELL_SCROLL_IGNEOUS_BLAST', quantity: 1 },
+]) }).run();
 database.close();
 await import("../src/index.js");

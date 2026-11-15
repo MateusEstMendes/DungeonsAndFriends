@@ -69,6 +69,5 @@ export function CombatOverlay() {
         </nav>
       </div>}
     </div>
-    <details className="combat-log"><summary>Histórico do encontro</summary><ol>{store.events.slice(-10).map(e => <li key={e.id}>Rodada {e.round} · {combatActionText(e)} · {combatResultText(e)}</li>)}</ol></details>
   </div>;
 }

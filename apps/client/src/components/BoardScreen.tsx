@@ -11,6 +11,7 @@ import { useGameStore } from "../store/useGameStore";
 import { useBoardStore } from "../store/useBoardStore";
 import { leaveRoom } from "../network/colyseusClient";
 import { BoardEditor } from "./master/BoardEditor";
+import { AdventureHUD } from "./hud/AdventureHUD";
 import { PlayerHUD } from "./hud/PlayerHUD";
 import "./board.css";
 export function BoardScreen() {
@@ -35,6 +36,7 @@ export function BoardScreen() {
     <div ref={host} className="board-canvas"/>
     {own?.awaitingPosition && <div className="board-error board-glass" role="status">Aguardando posicionamento pelo mestre. Não há casa livre na sua câmara.</div>}
     {error && <div className="board-error board-glass" role="alert">Não foi possível iniciar o tabuleiro: {error}. Recarregue a página e verifique a aceleração gráfica do navegador.</div>}
+    <AdventureHUD chamberId={arena ? combat.chamberId : chamberId} arena={arena}/>
     {arena ? <><CombatOverlay/><MasterRefereeBar/></> : <>
     <div className="chamber-title board-glass"><span className="eyebrow">Masmorra de Treinamento · {game.role === "MASTER" ? "Mestre" : "Aventura"}</span><h1>{chamber?.name || "Preparando câmara…"}</h1><small>{game.role === "MASTER" ? "Todas as entidades visíveis ao Mestre" : "Visão compartilhada · 4 hexágonos"}</small></div>
     {game.role === "MASTER" ? <BoardEditor/> : <PlayerHUD/>}

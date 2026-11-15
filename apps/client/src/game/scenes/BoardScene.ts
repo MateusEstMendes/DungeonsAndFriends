@@ -1,10 +1,12 @@
 import { isCharacterPresent } from "@df/shared";
-import { Container, Graphics, type Application } from "pixi.js";
+import { Container, Graphics, Text, type Application } from "pixi.js";
 import { gsap } from "gsap";
 import { findHexPath, getHexEdgeKey, getHexKey, hexToPixel, pixelToHex, type Hex } from "@df/shared";
 import { useGameStore } from "../../store/useGameStore";
 import { useBoardStore, type BoardChamber, type BoardEntity } from "../../store/useBoardStore";
 import { boardCommand } from "../../network/colyseusClient";
+import { useCombatStore } from "../../store/useCombatStore";
+import { useEconomyStore } from "../../store/useEconomyStore";
 import { BoardMotion } from "../motion";
 import { TerrainLayer } from "../layers/TerrainLayer";
 import { WallLayer } from "../layers/WallLayer";
@@ -14,6 +16,8 @@ import { FogOfWarLayer } from "../layers/FogOfWarLayer";
 interface ChamberLayers { root: Container; terrain: TerrainLayer; walls: WallLayer; objects: ObjectLayer; entities: EntityLayer; fog: FogOfWarLayer; debug: Graphics; signature: string; objectsSignature: string; entitiesSignature: string; fogSignature: string }
 export class BoardScene {
   readonly viewport = new Container();
+  private chatLayer = new Container();
+  private chatSignature = "";
   private motion = new BoardMotion();
   private layers = new Map<string, ChamberLayers>();
   private events = new AbortController();
@@ -27,9 +31,10 @@ export class BoardScene {
   private pulse?: gsap.core.Tween;
   private resize: ResizeObserver;
   constructor(private readonly app: Application, private readonly host: HTMLElement) {
+    app.resize();
     app.stage.addChild(this.viewport);
     this.viewport.position.set(app.screen.width / 2, app.screen.height / 2);
-    this.unsubscribers = [useBoardStore.subscribe(() => this.render()), useGameStore.subscribe(() => this.render())];
+    this.unsubscribers = [useBoardStore.subscribe(() => this.render()), useGameStore.subscribe(() => this.render()), useEconomyStore.subscribe(() => this.renderChat())];
     this.resize = new ResizeObserver(() => { this.app.resize(); this.cameraKey = ""; this.render(); }); this.resize.observe(host);
     const canvas = app.canvas, options = { signal: this.events.signal };
     canvas.addEventListener("pointerdown", this.pointerDown, options);
@@ -38,7 +43,9 @@ export class BoardScene {
     canvas.addEventListener("pointercancel", this.pointerCancel, options);
     canvas.addEventListener("wheel", this.wheel, { ...options, passive: false });
     window.addEventListener("keydown", this.keyDown, options);
+    this.viewport.addChild(this.chatLayer);
     this.render();
+    this.app.canvas.setAttribute("data-scene-ready", "true");
   }
   private get currentChamberId() {
     const game = useGameStore.getState(), board = useBoardStore.getState();
@@ -74,6 +81,7 @@ export class BoardScene {
         const point = hexToPixel(p.q, p.r); layer.debug.circle(point.x, point.y, 4 * 40 * Math.sqrt(3)).stroke({ color: 0xd9b66b, alpha: 0.35, width: 2 });
       }
     }
+    this.renderChat();
     const cameraKey = `${this.currentChamberId}:${board.macro}:${board.focusRevision}`;
     if (displayed.length && cameraKey !== this.cameraKey) {
       this.cameraKey = cameraKey;
@@ -83,11 +91,40 @@ export class BoardScene {
       const scale = board.macro ? Math.min(0.65, this.app.screen.width / (displayed.length * 850)) : Math.min(1, this.app.screen.width / 850, this.app.screen.height / 730);
       this.cameraTween?.kill();
       this.motion.run(() => {
-        const duration = this.motion.reduced ? 0 : 0.6;
+        if (this.motion.reduced) {
+          this.viewport.scale.set(scale);
+          this.viewport.position.set(this.app.screen.width / 2 - centerX * scale, this.app.screen.height / 2 - centerY * scale);
+          return;
+        }
+        const duration = 0.6;
         gsap.to(this.viewport.scale, { x: scale, y: scale, duration, ease: "power2.inOut", overwrite: true });
         this.cameraTween = gsap.to(this.viewport, { x: this.app.screen.width / 2 - centerX * scale, y: this.app.screen.height / 2 - centerY * scale, duration, ease: "power2.inOut", overwrite: true });
       });
     }
+  }
+  private renderChat() {
+    const game = useGameStore.getState(), board = useBoardStore.getState(), chats = useEconomyStore.getState().chats;
+    const signature = JSON.stringify([chats, game.role, board.activeVision, [...this.layers.keys()],
+      chats.map(c => { const p = game.players.find(p => p.id === c.actorId); return p && [p.id, p.role, p.q, p.r, p.currentChamberId, p.isHiddenByMaster]; }),
+      board.chambers.map(c => [c.id, c.offsetX, c.offsetY, c.spawnQ, c.spawnR])]);
+    if (signature === this.chatSignature) return;
+    this.chatSignature = signature;
+    this.chatLayer.removeChildren().forEach(child => { gsap.killTweensOf(child); child.destroy({ children: true }); });
+    const now = Date.now() + useCombatStore.getState().serverClockOffset;
+    for (const chat of chats) {
+      const chamber = board.chambers.find(c => c.id === chat.chamberId);
+      if (!chamber || !this.layers.has(chamber.id) || chat.expiresAt <= now) continue;
+      const actor = game.players.find(p => p.id === chat.actorId);
+      if (chat.actorKind !== 'MASTER' && (!actor || actor.currentChamberId !== chamber.id || actor.isHiddenByMaster || (game.role !== 'MASTER' && !board.activeVision.includes(getHexKey(actor.q, actor.r))))) continue;
+      const point = hexToPixel(actor?.role === 'PLAYER' ? actor.q : chamber.spawnQ, actor?.role === 'PLAYER' ? actor.r : chamber.spawnR);
+      const group = new Container(); group.position.set(point.x + chamber.offsetX, point.y + chamber.offsetY - 65);
+      const label = new Text({ text: `${chat.actorName}: ${chat.text}`, style: { fontFamily: 'sans-serif', fontSize: 14, fill: 0xffedd0, wordWrap: true, wordWrapWidth: 210, breakWords: true } });
+      label.anchor.set(0.5, 1);
+      const box = new Graphics().roundRect(-label.width / 2 - 10, -label.height - 12, label.width + 20, label.height + 22, 10).fill({ color: 0x211c2b, alpha: 0.96 }).stroke({ color: 0xa08452, width: 1 });
+      group.addChild(box, label); this.chatLayer.addChild(group);
+      if (!this.motion.reduced) this.motion.run(() => { gsap.to(group, { alpha: 0, delay: Math.max(0, (chat.expiresAt - now - 1000) / 1000), duration: Math.min(1, (chat.expiresAt - now) / 1000) }); });
+    }
+    this.viewport.setChildIndex(this.chatLayer, this.viewport.children.length - 1);
   }
   private point(event: PointerEvent | WheelEvent) {
     const rect = this.app.canvas.getBoundingClientRect(); return { x: event.clientX - rect.left, y: event.clientY - rect.top };

@@ -112,8 +112,30 @@ Implementado conforme `fase5-plano.md`, mantendo o combate JRPG:
 - Ajustados rótulos flutuantes compactos e duração da bandeja de dados para evitar sobreposição entre ações no mobile; o status e o log mantêm o resultado completo.
 - Testes E2E anteriores de combate foram atualizados para dados e nomes das ações reais, sem presumir dano fixo ou ataques que o personagem não possui.
 
-## Próximo incremento
+## Incremento 6: Etapa 5 — interfaces de economia e HUD compartilhada
 
-Etapa 5: interfaces de ficha/mochila/grimório, lojas e baús, ícones SVG, chat efêmero, bandeja de dados e gaveta de log na HUD do tabuleiro e no combate. Os contratos, handlers e stores correspondentes já existem.
+- `CharacterSheetDrawer` reúne Ficha, Equipamentos & Mochila e Grimório; consome snapshots privados, mostra retrato, atributos, passivas, habilidades, recursos, ouro e atributos derivados. Adapta-se como gaveta lateral no desktop e painel inferior no mobile.
+- Equipamento usa slots reais e sinaliza bloqueio da mão secundária por armas 2H. Pergaminhos conhecidos ficam desabilitados. Consumíveis podem ser usados em si no próprio turno, pelo executor autoritativo de combate; a consulta do Mestre é somente leitura.
+- `ShopModal` implementa compra, venda a 50%, saldo, estoque finito/infinito, bloqueio de venda de equipamento e editor visual de nome/diálogo/estoque exclusivo do Mestre.
+- `ChestModal` permite coleta individual de itens/ouro ou sequência de coleta total, com edição visual de ouro/loot pelo Mestre. Cada coleta da sequência mantém a transação e as validações autoritativas existentes; a sequência completa não constitui uma transação única.
+- `AdventureHUD` integra ficha, dados d4/d6/d8/d10/d12/d20/d100, gaveta de log e chat ao tabuleiro e à arena, para ambos os papéis. Jogadores recebem ações contextuais junto de objetos visíveis/adjacentes, sem paredes entre eles. A janela fecha quando perdem acesso ou iniciam combate.
+- O Mestre seleciona personagens para consultar suas fichas e abre editores de baú/loja pelo inspetor de objetos. O editor do tabuleiro coloca mercadores; `ObjectLayer` renderiza uma silhueta própria.
+- `ItemIcons` fornece ícones SVG de armas, escudos, focos, armaduras, consumíveis, pergaminhos e elementos mágicos, sem importar os JPGs de referência para o bundle.
+- Chat aparece em balões ancorados aos tokens no Pixi e em avisos discretos na arena; usa o prazo de sete segundos recebido do servidor e respeita redução de movimento. O desenho dos balões é atualizado somente quando suas informações mudam.
+- `CombatLogDrawer` substitui o histórico provisório e apresenta eventos de combate, resultados por alvo, rolagens e horários. Os menus dinâmicos de combate e controles de IA da Etapa 4 permanecem integrados.
+- Respostas de loja/baú são aplicadas somente à janela atualmente solicitada. Fechar ou trocar de objeto descarta respostas atrasadas e impede que alterações de estoque/loot reabram uma janela fechada; há testes específicos desse ciclo.
+- Janelas usam diálogo modal nativo, foco contido, Escape, retorno ao controle de origem, alvos de toque de 44px e apresentação de erros do servidor dentro da janela.
 
-A falha de reconexão registrada no primeiro incremento permanece pendente; a verificação E2E completa da fase segue na Etapa 6.
+## Incremento 7: Etapa 6 — verificação da fase
+
+- Suíte Vitest: 28 arquivos, 178 testes passaram, incluindo migrações, regras compartilhadas, concorrência de economia, chat e execução de IA.
+- Build e tipagem: passaram; permanece o aviso já existente de bundle acima de 500 kB.
+- Playwright: os 9 cenários passaram em Chromium, incluindo tabuleiro/toque, perspectiva do Mestre, magia/IA, reconexão em combate, dano mínimo, economia, imagens de inimigos e expulsão/retorno com a mesma ficha.
+- Novo E2E de economia cobre coleta de baú, slots 2H, leitura de pergaminho, compra/venda, edição da loja pelo Mestre, dados/log e expiração do chat.
+- Teste de magia/IA atualizado para consultar a gaveta de log. Testes de combate encerram explicitamente as sessões ao concluir, evitando manter conexões reservadas durante a janela de reconexão entre cenários.
+- Corrigida inicialização da câmera com redução de movimento: resize e posicionamento são imediatos; o E2E de toque aguarda a cena pronta. Atalhos mobile ficam ao lado do retrato e se ocultam durante submenus para liberar os comandos de combate.
+- Cenários de proximidade saem da região dos monstros antes de se aproximar novamente, evitando depender da assinatura de alertas deixada por outro teste.
+- O teste de presença compara o HP antes/depois da expulsão e retorno, preservando a verificação sem assumir HP cheio após outros combates.
+- Playwright usa o navegador instalado por padrão em Linux/macOS, preservando `CHROME_PATH` e o caminho anterior em Windows.
+
+O cenário completo de reconexão em combate passou: recarregar a página preserva participante, iniciativa, ação extra e comandos disponíveis; pausa/retomada e fuga do Mestre também foram validadas. A pendência registrada no primeiro incremento foi encerrada. A suíte E2E completa passou. Etapas 5 e 6 concluídas.

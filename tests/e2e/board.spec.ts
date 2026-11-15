@@ -53,6 +53,7 @@ test("Jogador recebe visão filtrada, move e mantém a névoa; mobile respeita l
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   // Test real touch movement at the adjacent eastern hex center.
   const canvas = page.locator(".board-canvas canvas"), box = (await canvas.boundingBox())!;
+  await expect(canvas).toHaveAttribute("data-scene-ready", "true");
   const scale = Math.min(1, box.width / 850, box.height / 730);
   await page.touchscreen.tap(box.x + box.width / 2 + Math.sqrt(3) * 40 * scale, box.y + box.height / 2);
   await expect(page.getByText("Hexágono (1, 0)", { exact: true })).toBeVisible();

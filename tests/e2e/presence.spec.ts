@@ -24,7 +24,8 @@ test('master consults absent sheets, kicks a character and approves return with 
     await expect(roster).toContainText('Ael de Teste');
     await expect(roster).toContainText('Ausente');
     await roster.getByText('Consultar ficha', { exact: true }).click();
-    await expect(roster).toContainText('HP 110/110');
+    const preservedHp = (await roster.innerText()).match(/HP \d+\/\d+/)?.[0];
+    expect(preservedHp).toBeTruthy();
     await player.goto('/'); await player.getByRole('button', { name: 'Continuar sessão' }).click();
     await expect(player.getByRole('region', { name: 'Seu personagem' })).toContainText('Ael de Teste');
     await expect(roster).toContainText('Na sala');
@@ -39,7 +40,7 @@ test('master consults absent sheets, kicks a character and approves return with 
     await gm.getByRole('button', { name: 'Aprovar', exact: true }).click();
     await gm.getByRole('button', { name: /Personagens/ }).click();
     await expect(player.getByRole('region', { name: 'Seu personagem' })).toContainText('Ael de Teste');
-    await expect(player.getByRole('region', { name: 'Seu personagem' })).toContainText('HP 110/110');
+    await expect(player.getByRole('region', { name: 'Seu personagem' })).toContainText(preservedHp!);
     await player.getByRole('button', { name: 'Sair', exact: true }).click();
     await expect(roster).toContainText('Ausente');
     await gm.screenshot({ path: '.local/presence-master.png', animations: 'disabled' });
