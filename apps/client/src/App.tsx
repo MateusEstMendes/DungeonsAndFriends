@@ -1,6 +1,9 @@
 import { RecoveryModal } from "./components/master/RecoveryModal";
 import { boardCommand } from "./network/colyseusClient";
 import { PROTOCOL_VERSION } from "@df/shared";
+import { AudioSettings } from "./components/AudioSettings";
+import { initializeAudio } from "./audio/soundManager";
+import { useEffect } from "react";
 import { lazy, Suspense } from "react";
 const CharacterCreatorScreen = lazy(() => import("./components/character/CharacterCreatorScreen").then(module => ({ default: module.CharacterCreatorScreen })));
 const BoardScreen = lazy(() => import("./components/BoardScreen").then(module => ({ default: module.BoardScreen })));
@@ -12,6 +15,7 @@ import { leaveRoom } from "./network/colyseusClient";
 import { useGameStore } from "./store/useGameStore";
 import { useUIStore } from "./store/useUIStore";
 export function App() {
+  useEffect(initializeAudio, []);
   const screen = useUIStore(state => state.screen);
   const own = useGameStore(state => state.players.find(p => p.id === state.playerId));
   const notice = useUIStore(state => state.notice);
@@ -29,7 +33,7 @@ function ConnectionBar() {
   const connectionState = useGameStore(state => state.connectionState);
   const latencyMs = useGameStore(state => state.latencyMs);
   const connectionLabels = { DISCONNECTED: "Desconectado", CONNECTING: "Conectando…", CONNECTED: "Conectado", RECONNECTING: "Reconectando…" };
-  return <header className="topbar"><span>✦ Sala <strong>{roomCode}</strong></span><span role="status">{connectionLabels[connectionState]} {latencyMs !== null && `· ${latencyMs} ms`}</span>{role === "MASTER" && <><CharacterRoster/><ApprovalQueuePopover/><button onClick={() => { if (window.confirm("Encerrar esta sessão e seu combate? As fichas e os itens serão preservados.")) boardCommand("MASTER_CLOSE_SESSION"); }}>Encerrar Sessão</button></>}</header>;
+  return <header className="topbar"><span>✦ Sala <strong>{roomCode}</strong></span><span role="status">{connectionLabels[connectionState]} {latencyMs !== null && `· ${latencyMs} ms`}</span><AudioSettings/>{role === "MASTER" && <><CharacterRoster/><ApprovalQueuePopover/><button onClick={() => { if (window.confirm("Encerrar esta sessão e seu combate? As fichas e os itens serão preservados.")) boardCommand("MASTER_CLOSE_SESSION"); }}>Encerrar Sessão</button></>}</header>;
 }
 function RoomScreen() {
   const role = useGameStore(state => state.role);

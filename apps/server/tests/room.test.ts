@@ -456,4 +456,19 @@ describe.sequential("sala autoritativa", () => {
     } finally { await hero.leave(); await master.leave(); }
   });
 
+  it('broadcasts validated narrative sounds only for the master and rate limits repeated effects', async () => {
+    const master = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const listener = await testServer.connectTo(room, { name: 'Ouvinte', ...version });
+    try {
+      const denied = listener.waitForMessage('ACTION_ERROR');
+      listener.send('MASTER_NARRATIVE_SFX', { effect: 'master_thunder' }); expect(await denied).toContain('autorizada');
+      const received = listener.waitForMessage('NARRATIVE_SFX'), own = master.waitForMessage('NARRATIVE_SFX');
+      master.send('MASTER_NARRATIVE_SFX', { effect: 'master_thunder' });
+      expect(await received).toEqual({ effect: 'master_thunder' }); expect(await own).toEqual({ effect: 'master_thunder' });
+      const limited = master.waitForMessage('ACTION_ERROR'); master.send('MASTER_NARRATIVE_SFX', { effect: 'master_door_slam' });
+      expect(await limited).toContain('Aguarde');
+      const invalid = master.waitForMessage('ACTION_ERROR'); master.send('MASTER_NARRATIVE_SFX', { effect: 'arbitrary-url' }); expect(await invalid).toContain('inválido');
+    } finally { await listener.leave(); await master.leave(); }
+  });
+
 });

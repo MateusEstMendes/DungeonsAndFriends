@@ -46,3 +46,13 @@ Implementar o serviço de checkpoints e o ciclo de encerramento/restauração: d
 - Cliente tenta reconectar com token persistente após esgotar a reconexão nativa, com backoff e jitter, cancelável ao sair.
 - Validação: 30 arquivos / 186 testes passaram, incluindo orçamento de ações, preservação de ausentes, rollback de checkpoint e encerramento sem falso prompt. Cenários existentes de reinício agora confirmam a restauração explicitamente.
 - Teste brutal em processo separado e verificações de navegador ficam na etapa 5. Validação física iOS/Android e Mesa Zero exigem dispositivos e participantes reais.
+
+## Etapa 3 — Áudio imersivo
+
+- Howler com WebAudio, desbloqueio por gesto, recuperação de contexto ao voltar para a aba, crossfade e cancelamento de timers antigos nas trocas rápidas de cena.
+- Preferências persistentes `df_audio_prefs`, volumes independentes e mute; painel acessível a jogadores e Mestre.
+- Pipeline determinístico `pnpm audio:build`: 15 SFX originais com gaps de 500 ms e duas músicas em loop, WebM/Opus e MP3. Proveniência/CC0 no README dos assets.
+- Gatilhos de passos/portais por estado confirmado, combate por eventos sem duplicação, dados, transações confirmadas e efeitos narrativos globais. Pacote Zod restringe efeitos; só Mestre pode disparar, com intervalo de 400 ms.
+- API vigente do Howler usa `autoUnlock`, substituindo a opção legada `mobileAutoEnable` citada no plano.
+- Validação: build passou; suíte completa com 188 testes passou; rodada específica com 18 testes passou após adicionar o cenário narrativo (autorização, broadcast, rate limit e payload inválido). Testes de áudio cobrem desbloqueio, retorno da aba, crossfade rápido, limites do sprite e outcomes reais de esquiva/cura/magia.
+- Reprodução audível e comportamento em iPhone/Android físicos ainda precisam de verificação manual.

@@ -1,4 +1,6 @@
 import { useRecoveryStore, type RecoverySummary } from "../store/useRecoveryStore";
+import { combatSfx } from "../audio/events";
+import { playSfx, type Sfx } from "../audio/soundManager";
 import { Client, type Room } from "@colyseus/sdk";
 import { CHAT_TTL_MS, OpenShopSchema, OpenChestSchema, PROTOCOL_VERSION, RoomCodeSchema, SessionCredentialsPayloadSchema, type RoomState, type CharacterCreationPayload, type ApprovalStatus, type InventorySnapshot, type ShopSnapshot, type ChestSnapshot, type EphemeralChatMessage, type DiceResult, type SessionLogEntry } from "@df/shared";
 import { initialGameState, useGameStore } from "../store/useGameStore";
@@ -36,6 +38,13 @@ function attach(room: Room<unknown, RoomState>) {
   let networkErrorNotice: string | undefined;
   const sync = (state: RoomState) => {
     const players = Array.from(state.players.values(), player => ({ id: player.id, name: player.name, role: player.role, status: player.status, connected: player.connected, reconnecting: player.reconnecting, awaitingPosition: player.awaitingPosition, characterId:player.characterId, characterName:player.characterName, raceId:player.raceId, archetypeId:player.archetypeId, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, defense:player.defense, speed:player.speed, finalDex:player.finalDex, dodgeChance:player.dodgeChance, flatDr:player.flatDr, tokenUrl:player.tokenUrl, portraitUrl:player.portraitUrl, currentChamberId:player.currentChamberId, q:player.q, r:player.r, moveCooldownEndsAt:player.moveCooldownEndsAt, remainingSteps:player.remainingSteps, moveRevision:player.moveRevision, isHiddenByMaster:player.isHiddenByMaster }));
+    const ownBefore = useGameStore.getState().players.find(p => p.id === useGameStore.getState().playerId);
+    const ownAfter = players.find(p => p.id === useGameStore.getState().playerId);
+    if (ownBefore && ownAfter && ownBefore.currentChamberId !== ownAfter.currentChamberId) playSfx('portal_transition');
+    else if (ownBefore && ownAfter && (ownBefore.q !== ownAfter.q || ownBefore.r !== ownAfter.r)) {
+      const terrain = state.chambers.get(ownAfter.currentChamberId)?.cells.get(`${ownAfter.q},${ownAfter.r}`);
+      playSfx(terrain === 'GRASS' ? 'footstep_grass' : 'footstep_stone');
+    }
     const serialized = JSON.stringify(players);
     if (serialized !== lastPlayers) { lastPlayers = serialized; useGameStore.setState({ players }); }
     const own = state.players.get(useGameStore.getState().playerId);
@@ -58,7 +67,9 @@ function attach(room: Room<unknown, RoomState>) {
     receiveChat(message, now);
     if (message.expiresAt > now) setTimeout(() => expireChat(message.id), Math.min(CHAT_TTL_MS, message.expiresAt - now));
   });
-  room.onMessage('DICE_RESULT', (result: DiceResult) => useEconomyStore.setState({ lastDice: result }));
+  room.onMessage('DICE_RESULT', (result: DiceResult) => { playSfx('dice_roll'); useEconomyStore.setState({ lastDice: result }); });
+  room.onMessage('NARRATIVE_SFX', (data: { effect: Sfx }) => playSfx(data.effect));
+  room.onMessage('ECONOMY_SFX', (data: { effect: Sfx }) => playSfx(data.effect));
   room.onMessage('LOG_ENTRY', (entry: SessionLogEntry) => receiveLog([entry]));
   room.onMessage('LOG_SYNC', (data: { entries: SessionLogEntry[] }) => receiveLog(data.entries, true));
   room.onMessage('CLOCK_SYNC', (data: { clientSentAt: number; serverNow: number }) => {
@@ -70,9 +81,12 @@ function attach(room: Room<unknown, RoomState>) {
     useCombatStore.setState(s => ({ participants: data.participants, cutoffs: data.cutoffs,
       ...(s.combat.encounterId !== data.encounterId ? { events: [], targetId: '', pending: false } : {}) }));
   });
-  room.onMessage('COMBAT_EVENT', (event: CombatEvent) => useCombatStore.setState(s => ({
+  room.onMessage('COMBAT_EVENT', (event: CombatEvent) => {
+    if (useCombatStore.getState().events.some(e => e.id === event.id)) return;
+    const effect = combatSfx(event); if (effect) playSfx(effect);
+    useCombatStore.setState(s => ({
     events: [...s.events.filter(e => e.id !== event.id), event].slice(-40), pending: false, busyUntil: Date.now() + event.duration,
-  })));
+  })); });
   room.onMessage("ACTIVE_VISION", (data: { chamberId: string; cells: string[] }) => useBoardStore.setState({ visionChamberId: data.chamberId, activeVision: data.cells }));
   room.onMessage("SESSION_CREDENTIALS", (input: unknown) => {
     const parsed = SessionCredentialsPayloadSchema.safeParse(input);

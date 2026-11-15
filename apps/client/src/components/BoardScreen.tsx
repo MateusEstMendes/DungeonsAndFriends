@@ -1,3 +1,4 @@
+import { crossfadeBgm } from "../audio/soundManager";
 import { useEffect, useRef, useState } from "react";
 import { PixiApp } from "../game/PixiApp";
 import { BoardScene } from "../game/scenes/BoardScene";
@@ -20,6 +21,8 @@ export function BoardScreen() {
   const { combat, proximity } = useCombatStore();
   const own = game.players.find(p => p.id === game.playerId);
   const participating = combat.active && (game.role === 'MASTER' || (!own?.awaitingPosition && own?.currentChamberId === combat.chamberId));
+  useEffect(() => { crossfadeBgm(participating ? 'bgm_combat_pov' : 'bgm_exploration'); }, [participating]);
+  useEffect(() => () => crossfadeBgm(undefined), []);
   const [arena, setArena] = useState(participating);
   useEffect(() => {
     if (participating) { setArena(true); return; }

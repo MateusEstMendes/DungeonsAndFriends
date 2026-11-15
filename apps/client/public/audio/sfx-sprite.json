@@ -1,0 +1,62 @@
+{
+  "dice_roll": [
+    0,
+    650
+  ],
+  "footstep_stone": [
+    1150,
+    220
+  ],
+  "footstep_grass": [
+    1870,
+    250
+  ],
+  "sword_slash": [
+    2620,
+    350
+  ],
+  "blunt_hit": [
+    3470,
+    350
+  ],
+  "bow_shoot": [
+    4320,
+    400
+  ],
+  "spell_fire": [
+    5220,
+    700
+  ],
+  "spell_ice": [
+    6420,
+    800
+  ],
+  "spell_heal": [
+    7720,
+    1000
+  ],
+  "dodge_whoosh": [
+    9220,
+    300
+  ],
+  "portal_transition": [
+    10020,
+    1200
+  ],
+  "coins_jingle": [
+    11720,
+    650
+  ],
+  "chest_open": [
+    12870,
+    650
+  ],
+  "master_thunder": [
+    14020,
+    2200
+  ],
+  "master_door_slam": [
+    16720,
+    1000
+  ]
+}

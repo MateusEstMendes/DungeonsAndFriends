@@ -1,5 +1,5 @@
 import { Room, ServerError, type AuthContext, type Client } from "@colyseus/core";
-import { ApprovalDecisionPayloadSchema, JoinRequestPayloadSchema, MasterAuthPayloadSchema, MasterMoveSchema, isCharacterPresent, PlayerSchema, RoomState, type PlayerRole, type SessionCredentialsPayload } from "@df/shared";
+import { MasterNarrativeSfxSchema, ApprovalDecisionPayloadSchema, JoinRequestPayloadSchema, MasterAuthPayloadSchema, MasterMoveSchema, isCharacterPresent, PlayerSchema, RoomState, type PlayerRole, type SessionCredentialsPayload } from "@df/shared";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { openDatabase } from "../db/index.js";
@@ -25,6 +25,7 @@ interface Identity { playerId: string; name: string; role: PlayerRole; sessionTo
 export class GameRoom extends Room<{ state: RoomState }> {
   private recoveryPending = false;
   private sessionClosed = false;
+  private lastNarrativeAt = 0;
   private pendingDeliveries: (() => void)[] | undefined;
   private roomRecord!: typeof rooms.$inferSelect;
   private bindings = new Map<string, string>();
@@ -94,13 +95,21 @@ export class GameRoom extends Room<{ state: RoomState }> {
           client.send('ACTION_ERROR', 'Encerre o combate antes de alterar o tabuleiro.'); return;
         }
         try {
-          if (['MASTER_RESTORE_SESSION', 'MASTER_DISCARD_SESSION', 'MASTER_CLOSE_SESSION', 'REQUEST_INVENTORY', 'REQUEST_LOG', 'CHAT_MESSAGE', 'ROLL_DICE', 'OPEN_SHOP', 'OPEN_CHEST'].includes(name)) action(player, input);
-          else this.durable(name, () => action(player, input));
+          if (['MASTER_RESTORE_SESSION', 'MASTER_DISCARD_SESSION', 'MASTER_CLOSE_SESSION', 'MASTER_NARRATIVE_SFX', 'REQUEST_INVENTORY', 'REQUEST_LOG', 'CHAT_MESSAGE', 'ROLL_DICE', 'OPEN_SHOP', 'OPEN_CHEST'].includes(name)) action(player, input);
+          else {
+            this.durable(name, () => action(player, input));
+            if (['BUY_ITEM', 'SELL_ITEM', 'LOOT_CHEST_ITEM'].includes(name)) client.send('ECONOMY_SFX', { effect: name === 'LOOT_CHEST_ITEM' ? 'chest_open' : 'coins_jingle' });
+          }
         }
         catch (error) { client.send("ACTION_ERROR", error instanceof Error && error.name !== "ZodError" ? error.message : "Comando inválido."); }
       });
     };
-    command('MASTER_RESTORE_SESSION' , true, () => {
+    command('MASTER_NARRATIVE_SFX', true, (_p, input) => {
+      const data = MasterNarrativeSfxSchema.parse(input);
+      if (Date.now() - this.lastNarrativeAt < 400) throw new Error('Aguarde antes do próximo efeito.');
+      this.lastNarrativeAt = Date.now(); this.broadcast('NARRATIVE_SFX', data);
+    });
+    command('MASTER_RESTORE_SESSION'  , true, () => {
       if (!this.recoveryPending) throw new Error('Não há recuperação pendente.');
       this.durable('SESSION_RESTORED', () => {
         this.recoveryPending = false;
