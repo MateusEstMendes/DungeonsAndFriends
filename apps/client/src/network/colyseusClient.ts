@@ -1,3 +1,4 @@
+import { useRecoveryStore, type RecoverySummary } from "../store/useRecoveryStore";
 import { Client, type Room } from "@colyseus/sdk";
 import { CHAT_TTL_MS, OpenShopSchema, OpenChestSchema, PROTOCOL_VERSION, RoomCodeSchema, SessionCredentialsPayloadSchema, type RoomState, type CharacterCreationPayload, type ApprovalStatus, type InventorySnapshot, type ShopSnapshot, type ChestSnapshot, type EphemeralChatMessage, type DiceResult, type SessionLogEntry } from "@df/shared";
 import { initialGameState, useGameStore } from "../store/useGameStore";
@@ -19,6 +20,7 @@ const client = new Client(import.meta.env.VITE_SERVER_URL || window.location.ori
 let active: Room<unknown, RoomState> | undefined;
 let heartbeat: ReturnType<typeof setInterval> | undefined;
 let attempt = 0;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
 function screenFor(status: ApprovalStatus) {
   useGameStore.setState({ approvalStatus: status });
   useUIStore.setState({ screen: status === "PENDING_APPROVAL" || status === "REJECTED" ? "WAITING" : "ROOM" });
@@ -46,6 +48,8 @@ function attach(room: Room<unknown, RoomState>) {
     useCombatStore.setState({ combat, ...(previous.turnToken !== combat.turnToken ? { pending: false } : {}), ...(!combat.active ? { selectedMonsterId: '' } : {}) });
   };
   room.onStateChange(sync);
+  room.onMessage('HAS_INTERRUPTED_SESSION', (summary: RecoverySummary) => useRecoveryStore.setState({ summary }));
+  room.onMessage('RECOVERY_RESOLVED', () => useRecoveryStore.setState({ summary: null }));
   room.onMessage('INVENTORY_SYNC', (snapshot: InventorySnapshot) => useEconomyStore.setState(s => ({ inventories: { ...s.inventories, [snapshot.playerId]: snapshot } })));
   room.onMessage('SHOP_SYNC', (snapshot: ShopSnapshot) => receiveShop(snapshot));
   room.onMessage('CHEST_SYNC', (snapshot: ChestSnapshot) => receiveChest(snapshot));
@@ -105,11 +109,12 @@ function attach(room: Room<unknown, RoomState>) {
     persistReconnectionToken('');
     useUIStore.getState().setNotice(message);
   });
-  room.onLeave(() => {
+  room.onLeave((code) => {
     if (active !== room) return;
     active = undefined;
     useEconomyStore.setState({ ...initialEconomyState });
     if (heartbeat) clearInterval(heartbeat);
+    if (!kickedNotice && code !== 1000 && code !== 4000) { retryAfterHostRestart(); return; }
     useGameStore.setState({ connectionState: "DISCONNECTED", latencyMs: null });
     useUIStore.setState({ screen: "LOBBY", notice: kickedNotice || "Conexão encerrada. Você pode tentar continuar sua sessão." });
   });
@@ -117,6 +122,25 @@ function attach(room: Room<unknown, RoomState>) {
     networkErrorNotice = message ?? "Erro de conexão.";
     useUIStore.getState().setNotice(networkErrorNotice);
   });
+}
+function retryAfterHostRestart() {
+  const generation = ++attempt;
+  useGameStore.setState({ connectionState: 'RECONNECTING', latencyMs: null });
+  useUIStore.setState({ notice: 'Servidor desconectado. Tentando reconectar...' });
+  let failures = 0;
+  const retry = async () => {
+    if (generation !== attempt) return;
+    const saved = savedSession();
+    if (!saved.sessionToken || !saved.roomCode) { useGameStore.setState({ connectionState: 'DISCONNECTED' }); useUIStore.setState({ screen: 'LOBBY' }); return; }
+    try {
+      const room = await client.joinById<RoomState>(saved.roomCode, { name: saved.name || 'Aventureiro', sessionToken: saved.sessionToken, clientVersion: PROTOCOL_VERSION });
+      if (generation !== attempt) { await room.leave(); return; }
+      useUIStore.setState({ notice: '' }); attach(room);
+    } catch {
+      if (generation === attempt) retryTimer = setTimeout(retry, Math.min(10_000, 1000 * 2 ** Math.min(failures++, 4)) * (0.9 + Math.random() * 0.2));
+    }
+  };
+  retryTimer = setTimeout(retry, 1000);
 }
 async function connect(action: () => Promise<Room<unknown, RoomState>>) {
   if (active || useGameStore.getState().connectionState === "CONNECTING") return;
@@ -151,6 +175,8 @@ export function reconnectSaved() {
 }
 export async function leaveRoom(forget = false) {
   ++attempt;
+  clearTimeout(retryTimer);
+  useRecoveryStore.setState({ summary: null });
   const room = active;
   active = undefined;
   if (heartbeat) clearInterval(heartbeat);

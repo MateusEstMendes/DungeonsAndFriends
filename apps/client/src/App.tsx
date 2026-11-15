@@ -1,3 +1,5 @@
+import { RecoveryModal } from "./components/master/RecoveryModal";
+import { boardCommand } from "./network/colyseusClient";
 import { PROTOCOL_VERSION } from "@df/shared";
 import { lazy, Suspense } from "react";
 const CharacterCreatorScreen = lazy(() => import("./components/character/CharacterCreatorScreen").then(module => ({ default: module.CharacterCreatorScreen })));
@@ -17,6 +19,7 @@ export function App() {
     {screen !== "LOBBY" && <ConnectionBar/>}
     {notice && <div className="notice" role="alert"><span>{notice}</span><button aria-label="Fechar aviso" onClick={() => useUIStore.setState({ notice: "" })}>×</button></div>}
     {screen === "LOBBY" ? <LobbyScreen/> : screen === "WAITING" ? <WaitingRoomScreen/> : own?.status === "NEEDS_CHARACTER_CREATION" && !own.characterId ? <Suspense fallback={<p role="status">Preparando criação de personagem…</p>}><CharacterCreatorScreen key={own.id}/></Suspense> : own?.role === "MASTER" || own?.status === "READY" ? <Suspense fallback={<p role="status">Preparando tabuleiro…</p>}><BoardScreen/></Suspense> : <RoomScreen/>}
+    <RecoveryModal/>
     <footer>Dungeons & Friends · v{PROTOCOL_VERSION}</footer>
   </main>;
 }
@@ -26,7 +29,7 @@ function ConnectionBar() {
   const connectionState = useGameStore(state => state.connectionState);
   const latencyMs = useGameStore(state => state.latencyMs);
   const connectionLabels = { DISCONNECTED: "Desconectado", CONNECTING: "Conectando…", CONNECTED: "Conectado", RECONNECTING: "Reconectando…" };
-  return <header className="topbar"><span>✦ Sala <strong>{roomCode}</strong></span><span role="status">{connectionLabels[connectionState]} {latencyMs !== null && `· ${latencyMs} ms`}</span>{role === "MASTER" && <><CharacterRoster/><ApprovalQueuePopover/></>}</header>;
+  return <header className="topbar"><span>✦ Sala <strong>{roomCode}</strong></span><span role="status">{connectionLabels[connectionState]} {latencyMs !== null && `· ${latencyMs} ms`}</span>{role === "MASTER" && <><CharacterRoster/><ApprovalQueuePopover/><button onClick={() => { if (window.confirm("Encerrar esta sessão e seu combate? As fichas e os itens serão preservados.")) boardCommand("MASTER_CLOSE_SESSION"); }}>Encerrar Sessão</button></>}</header>;
 }
 function RoomScreen() {
   const role = useGameStore(state => state.role);

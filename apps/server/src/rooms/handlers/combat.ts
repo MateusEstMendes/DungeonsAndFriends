@@ -335,6 +335,8 @@ export class CombatHandler {
       c.turnOrder.push(player.id);
     });
   }
+  captureRecovery() { return this.checkpoint(); }
+  restoreRecovery(before: ReturnType<CombatHandler['checkpoint']>) { this.rollback(before); }
   private checkpoint() {
     return { combat: this.state.combatState.toJSON(), participants: structuredClone([...this.participants.entries()]), controls: structuredClone([...this.controls.entries()]),
       status: this.encounterStatus, sessionStatus: this.state.sessionStatus, cutoffs: { ...this.cutoffs }, unlockAt: this.unlockAt, statusEvents: [...this.statusEvents] };

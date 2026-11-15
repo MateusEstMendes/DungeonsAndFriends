@@ -226,6 +226,7 @@ describe.sequential("sala autoritativa", () => {
     expect(room.state.combatState.active).toBe(false);
     expect(room.state.combatState.turnOrder.includes(saved.id)).toBe(false);
     const referee = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const recovered = referee.waitForMessage('RECOVERY_RESOLVED'); referee.send('MASTER_RESTORE_SESSION'); await recovered;
     const rejoined = await testServer.connectTo(room, { name: 'Ana', sessionToken: saved.sessionToken, ...version });
     await until(() => rejoined.state.players.get(saved.id)?.status === 'READY');
     expect(room.state.combatState.active).toBe(false);
@@ -374,6 +375,7 @@ describe.sequential("sala autoritativa", () => {
     expect(room.state.players.get(saved.id)?.status).toBe("PENDING_APPROVAL");
     expect(room.state.players.get(saved.id)?.characterId).toBe(saved.characterId);
     const referee = await testServer.connectTo(room, { password: 'master-test-password', ...version });
+    const recovered = referee.waitForMessage('RECOVERY_RESOLVED'); referee.send('MASTER_RESTORE_SESSION'); await recovered;
     referee.send('APPROVE_PLAYER', { targetPlayerId: saved.id });
     await until(() => room.state.players.get(saved.id)?.status === 'READY');
     expect(room.state.players.get(saved.id)?.connected).toBe(true);

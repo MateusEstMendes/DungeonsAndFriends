@@ -37,3 +37,12 @@ Etapa 1 concluída. A suíte final de crash recovery/PWA/áudio/Lighthouse perma
 Implementar o serviço de checkpoints e o ciclo de encerramento/restauração: decisão do Mestre após crash, preservação de participantes e orçamento de ações, pausa inicial de combate, modal de recuperação e retry de conexão após queda do host.
 
 Áudio, PWA, ergonomia adicional, teste SIGKILL, Lighthouse e Mesa Zero permanecem nas Etapas 3–5. A fase 6 ainda não está concluída.
+
+## Etapa 2 — Recuperação e ciclo de sessão
+
+- Checkpoints e eventos mutantes são confirmados na mesma transação SQLite. Os dados relacionais (fichas, equipamentos, ouro, baús, mapa e participantes) são a fonte autoritativa; o checkpoint registra metadados, presença e estado do combate. Falhas restauram memória e banco.
+- Boot preserva participantes, ausências, iniciativa, ações consumidas e turnToken; combate reinicia pausado e IA fica bloqueada até a decisão do Mestre. Modal permite restaurar ou descartar preservando fichas e economia.
+- Encerrar Sessão fecha o encontro, marca CLOSED, remove checkpoint e consolida WAL. Sair depois disso não recria marcador de recuperação. Uma ação nova inicia outra sessão.
+- Cliente tenta reconectar com token persistente após esgotar a reconexão nativa, com backoff e jitter, cancelável ao sair.
+- Validação: 30 arquivos / 186 testes passaram, incluindo orçamento de ações, preservação de ausentes, rollback de checkpoint e encerramento sem falso prompt. Cenários existentes de reinício agora confirmam a restauração explicitamente.
+- Teste brutal em processo separado e verificações de navegador ficam na etapa 5. Validação física iOS/Android e Mesa Zero exigem dispositivos e participantes reais.

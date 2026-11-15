@@ -15,6 +15,7 @@ import { ShopHandler } from './handlers/shop.js';
 import { ChatAndLogHandler } from './handlers/chatAndLog.js';
 import { CombatHandler } from './handlers/combat.js';
 
+import { saveCheckpoint, detectInterruptedSession, closeSession } from "../services/crashRecoveryService.js";
 import { grantStarterKit } from "../db/seedEconomy.js";
 
 type Database = ReturnType<typeof openDatabase>;
@@ -22,6 +23,9 @@ export interface RoomServices { database: Database; tokenSecret: string; bootstr
 interface Identity { playerId: string; name: string; role: PlayerRole; sessionToken: string }
 
 export class GameRoom extends Room<{ state: RoomState }> {
+  private recoveryPending = false;
+  private sessionClosed = false;
+  private pendingDeliveries: (() => void)[] | undefined;
   private roomRecord!: typeof rooms.$inferSelect;
   private bindings = new Map<string, string>();
   private ips = new Map<string, string>();
@@ -61,14 +65,14 @@ export class GameRoom extends Room<{ state: RoomState }> {
     const chamberSend = (name: string, data: unknown, audience: string) => {
       for (const client of this.clients) {
         const p = this.state.players.get(this.bindings.get(client.sessionId) ?? '');
-        if (p?.connected && (p.role === 'MASTER' || (audience !== 'MASTER' && isCharacterPresent(p) && p.currentChamberId === audience))) client.send(name, data);
+        if (p?.connected && (p.role === 'MASTER' || (audience !== 'MASTER' && isCharacterPresent(p) && p.currentChamberId === audience))) this.deliver(() => client.send(name, data));
       }
     };
     this.chatAndLog = new ChatAndLogHandler(this.state, chamberSend);
     this.shop = new ShopHandler(this.state, this.services.database, record.id, (playerId, name, data, includeMaster) => {
       for (const client of this.clients) {
         const p = this.state.players.get(this.bindings.get(client.sessionId) ?? '');
-        if (p?.connected && (p.id === playerId || (includeMaster && p.role === 'MASTER'))) client.send(name, data);
+        if (p?.connected && (p.id === playerId || (includeMaster && p.role === 'MASTER'))) this.deliver(() => client.send(name, data));
       }
     }, () => this.refreshViews());
     this.combat = new CombatHandler(this.state, this.services.database, record.id, (name, data, audience) => {
@@ -76,20 +80,38 @@ export class GameRoom extends Room<{ state: RoomState }> {
       if (name === 'COMBAT_EVENT') this.chatAndLog.recordCombat(data as import('@df/shared').CombatEvent, audience);
     }, () => this.refreshViews(), undefined, undefined, p => { if (p.status === 'READY') this.shop.syncInventory(p); });
     this.combat.restore();
-    for (const player of this.state.players.values()) this.combat.removePlayer(player.id);
+    this.recoveryPending = Boolean(detectInterruptedSession(this.services.database, record.id));
+    if (this.state.combatState.active) this.state.combatState.isPaused = true;
     const master = new MasterHandler(this.state, this.services.database, record.id, this.movement, () => this.refreshViews());
     const command = (name: string, masterOnly: boolean, action: (player: PlayerSchema, input: unknown) => void) => {
       this.onMessage(name, (client, input) => {
         const player = this.state.players.get(this.bindings.get(client.sessionId) ?? "");
         if (!player || (masterOnly && player.role !== "MASTER")) { client.send("ACTION_ERROR", "Ação não autorizada."); return; }
+        if (this.recoveryPending && !['MASTER_RESTORE_SESSION', 'MASTER_DISCARD_SESSION', 'REQUEST_INVENTORY', 'REQUEST_LOG'].includes(name)) {
+          client.send('ACTION_ERROR', 'Aguardando decisão de recuperação do Mestre.'); return;
+        }
         if (this.state.combatState.active && ['REQUEST_MOVE','END_MOVEMENT','MASTER_MOVE_ENTITY','MASTER_EDIT','MASTER_DELETE_ENTITY','MASTER_UNDO','MASTER_REDO','MASTER_SET_STAGE','MASTER_SET_HIDDEN','MASTER_SET_CHAMBER_BIOME'].includes(name)) {
           client.send('ACTION_ERROR', 'Encerre o combate antes de alterar o tabuleiro.'); return;
         }
-        try { action(player, input); }
+        try {
+          if (['MASTER_RESTORE_SESSION', 'MASTER_DISCARD_SESSION', 'MASTER_CLOSE_SESSION', 'REQUEST_INVENTORY', 'REQUEST_LOG', 'CHAT_MESSAGE', 'ROLL_DICE', 'OPEN_SHOP', 'OPEN_CHEST'].includes(name)) action(player, input);
+          else this.durable(name, () => action(player, input));
+        }
         catch (error) { client.send("ACTION_ERROR", error instanceof Error && error.name !== "ZodError" ? error.message : "Comando inválido."); }
       });
     };
-    command('REQUEST_INVENTORY', false, (p, input) => this.shop.requestInventory(p, input ?? {}));
+    command('MASTER_RESTORE_SESSION' , true, () => {
+      if (!this.recoveryPending) throw new Error('Não há recuperação pendente.');
+      this.durable('SESSION_RESTORED', () => {
+        this.recoveryPending = false;
+        if (this.state.combatState.active) this.combat.pause({ paused: true });
+      });
+      this.broadcast('RECOVERY_RESOLVED');
+      this.refreshViews();
+    });
+    command('MASTER_DISCARD_SESSION', true, () => this.finishSession(true));
+    command('MASTER_CLOSE_SESSION', true, () => this.finishSession(false));
+    command('REQUEST_INVENTORY' , false, (p, input) => this.shop.requestInventory(p, input ?? {}));
     command('EQUIP_ITEM', false, (p, input) => this.shop.equipItem(p, input));
     command('UNEQUIP_ITEM', false, (p, input) => this.shop.unequipItem(p, input));
     command('USE_SCROLL', false, (p, input) => this.shop.useScroll(p, input));
@@ -154,7 +176,10 @@ export class GameRoom extends Room<{ state: RoomState }> {
     });
     let nextHeartbeatAt = Date.now() + 20_000;
     this.setSimulationInterval(() => {
-      this.combat.tick();
+      if (!this.recoveryPending && this.state.combatState.active && !this.state.combatState.isPaused) {
+        try { this.durable('COMBAT_TICK', () => this.combat.tick()); }
+        catch (error) { this.state.combatState.isPaused = true; console.error('Falha ao persistir combate', error); }
+      }
       if (Date.now() < nextHeartbeatAt) return;
       nextHeartbeatAt = Date.now() + 20_000;
       for (const client of this.clients) {
@@ -217,13 +242,14 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.bindings.set(client.sessionId, player.id);
     player.connected = true;
     player.reconnecting = false;
-    if (player.status === 'READY') this.movement.spawn(player);
+    if (player.status === 'READY' && !this.recoveryPending) this.movement.spawn(player);
     db.update(players).set({ sessionToken: auth.sessionToken, reconnectionToken: `${this.roomId}:${client.reconnectionToken}`, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
     this.credentials(client, auth.sessionToken, player);
     if (player.status === "READY") this.shop.syncInventory(player);
     this.sendLog(player);
     this.refreshViews();
     if (this.state.combatState.active && (player.role === 'MASTER' || (isCharacterPresent(player) && player.currentChamberId === this.state.combatState.chamberId))) client.send('COMBAT_ROSTER', this.combat.snapshot());
+    if (player.role === 'MASTER' && this.recoveryPending) client.send('HAS_INTERRUPTED_SESSION', detectInterruptedSession(this.services.database, this.roomRecord.id));
     this.log("join", client);
   }
 
@@ -263,10 +289,12 @@ export class GameRoom extends Room<{ state: RoomState }> {
       client.send("ACTION_ERROR", "A criação de ficha não está disponível para este jogador.");
       return;
     }
+    if (this.recoveryPending) { client.send('ACTION_ERROR', 'Aguardando recuperação da sessão.'); return; }
     let values: ReturnType<typeof prepareCharacter>;
     try { values = prepareCharacter(input); }
     catch { client.send("ACTION_ERROR", "Ficha inválida: confira atributos, limite de 27 pontos, bônus humano e imagens WebP."); return; }
     try {
+      this.durable('CHARACTER_CREATED', () => {
       const character = this.services.database.db.transaction(db => {
         const saved = db.select().from(players).where(and(eq(players.id, player.id), eq(players.roomId, this.roomRecord.id))).get();
         if (!saved || !["APPROVED", "NEEDS_CHARACTER_CREATION"].includes(saved.approvalStatus) || saved.characterId) {
@@ -279,6 +307,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
       this.syncCharacter(player, character);
       this.movement.spawn(player);
       this.shop.syncInventory(player);
+      });
       this.refreshViews();
     } catch {
       client.send("ACTION_ERROR", "Não foi possível salvar a ficha. Tente novamente.");
@@ -371,7 +400,7 @@ export class GameRoom extends Room<{ state: RoomState }> {
       player.connected = false;
       player.reconnecting = false;
       this.shop.disconnect(player.id);
-      this.combat.removePlayer(player.id);
+      if (!this.recoveryPending && !this.sessionClosed) this.durable('PLAYER_LEFT', () => this.combat.removePlayer(player.id));
       this.services.database.db.update(players).set({ reconnectionToken: null, lastSeenAt: Date.now() }).where(eq(players.id, player.id)).run();
       // Cancelar a espera libera o nome para uma nova tentativa.
       if (player.status === "PENDING_APPROVAL" && !player.characterId) {
@@ -386,10 +415,53 @@ export class GameRoom extends Room<{ state: RoomState }> {
     this.refreshViews();
     client.view?.dispose();
   }
+  private durable(event: string, work: () => void) {
+    const before = this.combat.captureRecovery();
+    const playersBefore = [...this.state.players.values()].map(p => [p, p.toJSON()] as const);
+    const fields = { activeStageId: this.state.activeStageId, explorationMode: this.state.explorationMode, sessionStatus: this.state.sessionStatus };
+    const pending = this.recoveryPending, closed = this.sessionClosed;
+    let completed = false;
+    this.pendingDeliveries = [];
+    try {
+      this.services.database.sqlite.transaction(() => {
+        work(); completed = true;
+        this.sessionClosed = false;
+        if (event !== 'COMBAT_TICK' || JSON.stringify(before.combat) !== JSON.stringify(this.state.combatState.toJSON()))
+          saveCheckpoint(this.services.database, this.roomRecord.id, this.state, event);
+      }).immediate();
+      const deliveries = this.pendingDeliveries; this.pendingDeliveries = undefined;
+      for (const send of deliveries) send();
+    } catch (error) {
+      this.pendingDeliveries = undefined;
+      this.combat.restoreRecovery(before);
+      for (const [player, data] of playersBefore) Object.assign(player, data);
+      Object.assign(this.state, fields); this.recoveryPending = pending; this.sessionClosed = closed;
+      if (completed) loadBoard(this.state, readBoard(this.services.database));
+      this.refreshViews();
+      throw error;
+    }
+  }
+  private finishSession(discard: boolean) {
+    const before = this.combat.captureRecovery();
+    try {
+      this.services.database.sqlite.transaction(() => {
+        if (this.state.combatState.active) this.combat.end();
+        closeSession(this.services.database, this.roomRecord.id);
+        this.state.sessionStatus = 'LOBBY';
+        this.services.database.db.update(rooms).set({ status: 'LOBBY' }).where(eq(rooms.id, this.roomRecord.id)).run();
+        if (discard) ensureActiveSession(this.services.database, this.roomRecord.id);
+      }).immediate();
+    } catch (error) { this.combat.restoreRecovery(before); throw error; }
+    this.recoveryPending = false;
+    this.sessionClosed = !discard;
+    this.services.database.checkpointWal('TRUNCATE');
+    this.broadcast('RECOVERY_RESOLVED'); this.refreshViews();
+  }
   private sendLog(player: PlayerSchema) {
     for (const client of this.clients) if (this.bindings.get(client.sessionId) === player.id) client.send('LOG_SYNC', { entries: this.chatAndLog.history(player) });
   }
-  private refreshViews() { this.combat?.syncMonsterModes(); this.fov.refresh(this.clients, client => this.bindings.get(client.sessionId)); }
+  private deliver(send: () => void) { if (this.pendingDeliveries) this.pendingDeliveries.push(send); else send(); }
+  private refreshViews() { this.combat?.syncMonsterModes(); this.deliver(() => this.fov.refresh(this.clients, client => this.bindings.get(client.sessionId))); }
   private log(event: string, client: Client, rttMs?: number) {
     console.log(JSON.stringify({ timestamp: new Date().toISOString(), event, roomCode: this.roomId, ip: this.ips.get(client.sessionId) ?? "unknown", rttMs: rttMs ?? null }));
   }
