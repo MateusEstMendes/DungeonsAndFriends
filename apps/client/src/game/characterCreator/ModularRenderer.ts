@@ -43,7 +43,9 @@ export class ModularRenderer {
      catch(error){textures.forEach(t=>t.destroy(true));throw error;}
      if(this.disposed||revision!==this.revision){textures.forEach(t=>t.destroy(true));return;}
      if(layer)this.release(layer);
-     const container=new Container({zIndex:index*10,label:id});
+     // Ears sit behind the face so their skin fill cannot cover its outline.
+     const zIndex=id==='30_ears'?5:index*10;
+     const container=new Container({zIndex,label:id});
      const shading=new Sprite(textures[0]),ink=new Sprite(textures[1]);
      ink.tint=0xFFFFFF;container.addChild(shading,ink);this.character.addChild(container);
      layer={key,container,shading,ink};this.layers.set(id,layer);
