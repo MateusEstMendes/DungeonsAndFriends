@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFileSync } from 'node:fs';
 
 test('master consults absent sheets, kicks a character and approves return with the same sheet', async ({ browser }) => {
@@ -43,7 +43,7 @@ test('master consults absent sheets, kicks a character and approves return with 
     await expect(player.getByRole('region', { name: 'Seu personagem' })).toContainText(preservedHp!);
     await player.getByRole('button', { name: 'Sair', exact: true }).click();
     await expect(roster).toContainText('Ausente');
-    await gm.screenshot({ path: '.local/presence-master.png', animations: 'disabled' });
+    await gm.screenshot({ timeout: 60_000, path: '.local/presence-master.png', animations: 'disabled' });
     expect(errors).toEqual([]);
     await gm.getByRole('button', { name: 'Sair', exact: true }).click();
   } finally { await context.close(); await gmContext.close(); }

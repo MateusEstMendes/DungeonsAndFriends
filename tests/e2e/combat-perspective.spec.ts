@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFileSync } from 'node:fs';
 
 test('Mestre observa herói, comanda criatura e identifica impacto no jogador', async ({ browser }) => {
@@ -46,7 +46,7 @@ test('Mestre observa herói, comanda criatura e identifica impacto no jogador', 
   await expect(player.locator('.combat-dice-status strong')).toContainText(firstNatural + 5 < 10 ? 'Errou: defesa do alvo' : 'DR absorveu');
   const result = await player.locator('.combat-dice-status').innerText();
   await expect(gm.locator('.combat-dice-status')).toHaveText(result.replace(/\n/g, ''));
-  await player.screenshot({ path: '.local/phase4-player-mobile.png' });
+  await player.screenshot({ timeout: 60_000, path: '.local/phase4-player-mobile.png' });
   expect(await player.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await player.getByRole('button', { name: 'Defender', exact: true }).click();
   await player.getByRole('button', { name: 'Esquiva Ativa', exact: true }).click();

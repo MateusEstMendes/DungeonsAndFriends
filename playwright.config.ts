@@ -5,8 +5,4 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:4179", browserName: "chromium", headless: true,
     launchOptions: { ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}), args: ["--enable-webgl", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] },
     trace: "retain-on-failure", screenshot: "only-on-failure" },
-  webServer: {
-    command: "node apps/server/node_modules/tsx/dist/cli.mjs apps/server/scripts/board-e2e-host.ts",
-    url: "http://127.0.0.1:4179/health", reuseExistingServer: false, timeout: 30_000,
-  },
 });

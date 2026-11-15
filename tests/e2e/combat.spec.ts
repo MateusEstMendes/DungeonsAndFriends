@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve, sep } from 'node:path';
 
 test('proximidade, arena sincronizada, ações extras e soberania do Mestre em mobile', async ({ browser }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(360_000);
   const gmContext = await browser.newContext(), gm = await gmContext.newPage();
   const errors: string[] = []; gm.on('pageerror', e => errors.push(e.message));
   await gm.goto('/'); await gm.getByText('Acesso do Mestre', { exact: true }).click();
@@ -48,10 +48,11 @@ test('proximidade, arena sincronizada, ações extras e soberania do Mestre em m
   await expect(player.locator('.combat-dice-status strong')).toContainText(firstNatural + 5 < 10 ? 'Errou: defesa do alvo' : 'DR absorveu');
   const result = await player.locator('.combat-dice-status').innerText();
   await expect(gm.locator('.combat-dice-status')).toHaveText(result.replace(/\n/g, ''));
-  await player.screenshot({ path: '.local/phase4-player-mobile.png' });
+  await player.screenshot({ timeout: 60_000, path: '.local/phase4-player-mobile.png' });
   expect(await player.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await player.reload(); await player.getByRole('button', { name: 'Continuar sessão' }).click();
-  await expect(player.getByRole('region', { name: 'Arena de combate', exact: true })).toBeVisible();
+  // Reload reconstructs Pixi/WebGL under software rendering in CI.
+  await expect(player.getByRole('region', { name: 'Arena de combate', exact: true })).toBeVisible({ timeout: 60_000 });
   await expect(player.locator('.active-portrait')).toContainText('1 ação(ões)');
   await expect(player.getByRole('button', { name: 'Fugir', exact: true })).toBeDisabled();
   await player.getByRole('button', { name: 'Defender', exact: true }).click();
@@ -75,10 +76,11 @@ test('proximidade, arena sincronizada, ações extras e soberania do Mestre em m
   await expect(player.getByRole('button', { name: /Fugir/ })).toBeDisabled();
   await gm.getByRole('combobox', { name: 'Fuga', exact: true }).selectOption('GUARANTEED_100');
   await expect(player.getByRole('button', { name: /Fugir/ })).toBeEnabled();
-  await gm.screenshot({ path: '.local/phase4-master.png' });
+  await gm.screenshot({ timeout: 60_000, path: '.local/phase4-master.png' });
   await player.getByRole('button', { name: /Fugir/ }).click();
   await expect(player.locator('.combat-dice-status')).toContainText('Fuga bem-sucedida!');
-  await expect(player.getByRole('region', { name: 'Mesa de aventura', exact: true })).toBeVisible();
+  await player.bringToFront();
+  await expect(player.getByRole('region', { name: 'Mesa de aventura', exact: true })).toBeVisible({ timeout: 60_000 });
   expect(errors).toEqual([]);
   await player.getByRole('button', { name: 'Sair', exact: true }).click();
   await gm.getByRole('button', { name: 'Sair', exact: true }).click();
@@ -86,7 +88,7 @@ test('proximidade, arena sincronizada, ações extras e soberania do Mestre em m
 });
 
 test('golpe fraco aplica dano mínimo e apresenta DR na arena', async ({ browser }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
   const fixture = JSON.parse(readFileSync('.local/e2e-player.json', 'utf8'));
   // Only the dedicated fixture database is changed; production dice remain cryptographically random.
   const filename = resolve(fixture.databasePath);
@@ -115,9 +117,10 @@ test('golpe fraco aplica dano mínimo e apresenta DR na arena', async ({ browser
   await expect(player.locator('.combat-enemies')).toContainText(`${45 - damage}/45`);
   writeFileSync('.local/phase4-minimum-damage.json', JSON.stringify({ natural, rawDamage, damage, absorbed, targetHp: 45 - damage }));
   await player.bringToFront();
-  await player.screenshot({ path: '.local/phase4-minimum-damage.png' }); expect(errors).toEqual([]);
+  await player.screenshot({ timeout: 60_000, path: '.local/phase4-minimum-damage.png' }); expect(errors).toEqual([]);
   await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).click();
-  await expect(player.getByRole('region', { name: 'Mesa de aventura', exact: true })).toBeVisible();
+  await player.bringToFront();
+  await expect(player.getByRole('region', { name: 'Mesa de aventura', exact: true })).toBeVisible({ timeout: 60_000 });
   await player.getByRole('button', { name: 'Sair', exact: true }).click();
   await gm.getByRole('button', { name: 'Sair', exact: true }).click();
   await context.close(); await gmContext.close();

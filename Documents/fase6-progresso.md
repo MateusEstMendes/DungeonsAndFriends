@@ -83,3 +83,21 @@ Validação manual informada pelo usuário na retomada: **testou nos celulares e
 - A divisão de chunks fica a cargo do Vite, com as telas lazy já existentes. Agrupamento manual descartado após validação revelar carregamento gráfico indevido no lobby e erro de inicialização.
 - Build passou. Os dois cenários de tabuleiro (desktop/mobile/portais) passaram. Os dois testes novos de PWA e pinça passaram em 20,5 s: manifesto, cache offline de áudio, reabertura da interface offline, API sem cache, pinça sem edição e toque posterior funcional.
 - Validação em celulares informada pelo usuário: funcionou. Etapa 5 continua em validação; não confundir este registro com aprovação da Mesa Zero.
+
+### Etapa 5 — ponto atual da validação final
+
+- Lighthouse final atingiu **91** em performance mobile e **100** em acessibilidade, boas práticas e SEO, executado sem suítes concorrentes. `pnpm test:lighthouse` passa e produz relatório em `.local/`.
+- Para reduzir trabalho no lobby, o módulo de rede carrega na primeira conexão; a leitura de credenciais locais e a função de presença foram separadas da inicialização dos validadores/schemas. O pacote shared permite tree shaking de módulos sem efeitos globais. Bundle inicial: aproximadamente 281 kB.
+- Última suíte Vitest completa: **32 arquivos / 190 testes passaram**. Após separar armazenamento, os cinco testes específicos de credenciais e áudio também passaram.
+- Suíte E2E final ainda em execução no mesmo build. Até aqui, tabuleiro desktop/mobile, magia/IA e perspectiva do Mestre foram aprovados. Aguardar o resultado total antes de marcar a etapa técnica concluída.
+
+## Etapa 5 — implementação e validação técnica concluídas
+
+- Criado teste real de SIGKILL em processo separado, com dois heróis, dano por magia e MP consumido. Confere recursos, ouro, posições, iniciativa, token, ações e integridade após reabrir o WAL.
+- `pnpm test:lighthouse` executa auditoria em host/banco descartável e exige performance >= 90. Resultado final: **91**; acessibilidade/boas práticas/SEO **100**.
+- Workflow CI preparado para build, Vitest, Playwright, Lighthouse e artefatos. Não houve execução remota do workflow nesta sessão.
+- Testes E2E agora criam servidor e banco por cenário, liberando contextos/processos mesmo em falhas. Screenshots e transições de reconstrução/saída de arena têm esperas explícitas para o Chromium por software; nenhum critério de resultado foi removido.
+- Resultado: **190 testes Vitest aprovados** e **11 cenários E2E aprovados em rodadas sequenciais**. A rodada completa teve seis aprovados e cinco falhas de timeout/captura ou cascata; os casos afetados foram repetidos após corrigir o harness. A última rodada aprovou cinco de seis, e o catálogo restante passou isoladamente. Não foi feita outra execução única de todos os onze após esses ajustes.
+- Build e testes específicos finais de credenciais/áudio passaram. O diff desta entrega foi verificado antes do commit.
+
+**Entrega técnica das cinco etapas concluída.** O usuário informou sucesso nos testes em celulares. **A Mesa Zero de 90–120 minutos com participantes reais e redes mistas permanece pendente para aceite final da release**; não foi simulada nem declarada executada. Relatório: [fase6-validacao.md](fase6-validacao.md).

@@ -23,3 +23,4 @@ export * from "./combat/dice.js";
 export * from "./schema/economySnapshots.js";
 export * from './combat/participants.js';
 export * from './schema/audioPackets.js';
+export * from './presence.js';

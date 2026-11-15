@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixtures";
 import { readFileSync } from "node:fs";
 async function masterLogin(page: Page) {
   await page.goto("/");
@@ -25,7 +25,7 @@ test("Mestre edita, desfaz/refaz, troca câmara e usa visão macro sem erros gr�
   await page.keyboard.press("Control+y");
   await page.getByRole("button", { name: "Debug", exact: true }).click();
   await expect(page.getByRole("button", { name: "Debug", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await page.screenshot({ path: ".local/phase3-master.png" });
+  await page.screenshot({ timeout: 60_000, path: ".local/phase3-master.png" });
   await page.getByRole("button", { name: "Sair", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Dungeons & Friends" })).toBeVisible();
   expect(errors).toEqual([]);
@@ -49,7 +49,7 @@ test("Jogador recebe visão filtrada, move e mantém a névoa; mobile respeita l
   await expect(page.locator(".board-canvas canvas")).toBeVisible({ timeout: 15000 });
   const firstFrames = Buffer.concat(frames).toString("utf8");
   expect(firstFrames).not.toContain("training-1:monster"); expect(firstFrames).not.toContain("training-2:chest");
-  await page.screenshot({ path: ".local/phase3-player-mobile.png" });
+  await page.screenshot({ timeout: 60_000, path: ".local/phase3-player-mobile.png" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   // Test real touch movement at the adjacent eastern hex center.
   const canvas = page.locator(".board-canvas canvas"), box = (await canvas.boundingBox())!;
@@ -58,7 +58,7 @@ test("Jogador recebe visão filtrada, move e mantém a névoa; mobile respeita l
   await page.touchscreen.tap(box.x + box.width / 2 + Math.sqrt(3) * 40 * scale, box.y + box.height / 2);
   await expect(page.getByText("Hexágono (1, 0)", { exact: true })).toBeVisible();
   await page.waitForTimeout(1200);
-  await page.screenshot({ path: ".local/phase3-player-moved.png" });
+  await page.screenshot({ timeout: 60_000, path: ".local/phase3-player-moved.png" });
   // Cross and return through the portal using the accessible coordinate controls.
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByText("Mover por coordenadas", { exact: true }).click();

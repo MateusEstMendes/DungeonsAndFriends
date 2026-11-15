@@ -18,5 +18,6 @@
   "dependencies": {
     "@colyseus/schema": "^5.0.8",
     "zod": "^4.0.0"
-  }
+  },
+  "sideEffects": false
 }

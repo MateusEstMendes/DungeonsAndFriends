@@ -19,7 +19,8 @@
     "db:studio": "pnpm --filter @df/server db:studio",
     "start:host": "pnpm build && pnpm --filter @df/server start:host",
     "db:sanitize": "pnpm --filter @df/server db:sanitize",
-    "audio:build": "node scripts/build-audio-assets.mjs"
+    "audio:build": "node scripts/build-audio-assets.mjs",
+    "test:lighthouse": "node scripts/audit-lighthouse.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",

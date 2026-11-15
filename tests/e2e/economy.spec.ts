@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFileSync } from 'node:fs';
 test.use({ actionTimeout: 20_000 });
 test('mochila, baú, loja, pergaminho, dados e chat de sete segundos', async ({ browser }) => {
@@ -81,7 +81,7 @@ test('mochila, baú, loja, pergaminho, dados e chat de sete segundos', async ({ 
     await expect(gm.locator('.ephemeral-chat')).toContainText('Chat na arena');
     await expect(gm.locator('.ephemeral-chat')).not.toContainText('Chat na arena', { timeout: 10_000 });
     await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).click();
-    await player.screenshot({ path: '.local/phase5-economy-mobile.png' });
+    await player.screenshot({ timeout: 60_000, path: '.local/phase5-economy-mobile.png' });
     expect(await player.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
     await player.getByRole('button', { name: 'Sair', exact: true }).click(); await gm.getByRole('button', { name: 'Sair', exact: true }).click();

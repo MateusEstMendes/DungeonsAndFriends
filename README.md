@@ -1,6 +1,6 @@
 # Dungeons & Friends
 
-Fase 4 `v0.4.0`: monorepo pnpm com TypeScript, React 19 / Vite 8 / Tailwind 4, Colyseus 0.18, SQLite / Drizzle, tabuleiro e arena POV PixiJS 8, combate autoritativo e animações GSAP.
+Fase 6 (candidata a release): monorepo pnpm com TypeScript, React 19 / Vite 8 / Tailwind 4, Colyseus 0.18, SQLite / Drizzle, tabuleiro e arena POV PixiJS 8, combate autoritativo e animações GSAP.
 
 ## Começar uma mesa
 
@@ -13,7 +13,7 @@ pnpm start:host
 
 A senha padrão do Mestre neste projeto pessoal é `Mateus2312@`. O terminal mostra o código da sala e informa se a senha padrão ou `MASTER_PASSWORD` está em uso. Abra a URL pública, expanda **Acesso do Mestre** e faça login. Compartilhe o convite ou QR Code com os jogadores; o código da sala vem preenchido pelo parâmetro `?room=`. Cada jogador informa seu nome e aguarda a aprovação do Mestre na fila de pedidos.
 
-O Mestre usa **Pedidos** para aprovar ou recusar. O jogador aprovado cria a ficha, exporta seu token e entra no tabuleiro. O Mestre já acessa o editor da masmorra. Combate pertence às próximas fases.
+O Mestre usa **Pedidos** para aprovar ou recusar. O jogador aprovado cria a ficha, exporta seu token e entra no tabuleiro. O Mestre acessa o editor da masmorra e inicia combates com controle manual ou IA.
 
 O servidor mantém a mesma sala ao reiniciar e aplica a senha padrão também às salas existentes. Para substituir a senha durante a execução:
 
@@ -33,7 +33,7 @@ Ctrl+C encerra o servidor e o túnel. Execute apenas uma instância na porta 256
 - `pnpm test`: testes de contratos, serialização, autenticação, SQLite, aprovação e reconexão usando `@colyseus/testing` (porta local 2568).
 - `pnpm test:combat`: regras determinísticas, dados, migração e executor de combate.
 - `pnpm test:combat-sim`: simula 10.000 turnos sem interface e apresenta dano, cura e esquivas.
-- `pnpm test:e2e`: testes Chromium do tabuleiro em desktop e mobile, após `pnpm build`. Usa banco separado em `.local/` e servidor na porta 4179; encerra o servidor ao terminar. No Windows usa o Chrome instalado; `CHROME_PATH` permite informar outro executável Chromium.
+- `pnpm test:e2e`: testes Chromium do tabuleiro em desktop e mobile, após `pnpm build`. Usa banco descartável e servidor na porta 4179 para cada cenário; encerra ambos os contextos e o processo ao terminar cada teste. No Windows usa o Chrome instalado; `CHROME_PATH` permite informar outro executável Chromium.
 - `pnpm db:generate`: gera uma nova migração a partir de `schema.ts`.
 - `pnpm db:migrate`: aplica migrações pendentes.
 - `pnpm db:studio`: inspeciona o banco no navegador.
@@ -42,7 +42,7 @@ O servidor entrega o cliente compilado, `GET /health` e `GET /api/host-info`. O 
 
 ## Sessões e reconexão
 
-O navegador guarda `df_session_token`, `df_reconnection_token`, `df_room_code` e `df_player_name`. Após uma queda, o SDK tenta reconectar por até 60 segundos sem criar outro jogador. Após recarregar a página, o card **Continuar sessão** usa o token nativo e, se necessário, o token assinado persistente. Uma identidade aceita somente uma conexão por vez.
+O navegador guarda `df_session_token`, `df_reconnection_token`, `df_room_code` e `df_player_name`. Após uma queda, o SDK tenta reconectar na janela de tolerância de 60 segundos sem criar outro jogador. Se o host reiniciar, o cliente continua tentando com o token persistente e backoff. Após recarregar a página, o card **Continuar sessão** usa o token nativo e, se necessário, o token assinado persistente. Uma identidade aceita somente uma conexão por vez.
 
 A entrada nova persiste `PENDING_APPROVAL` e entrega credenciais provisórias para recuperar a espera após um reload; elas não concedem aprovação. Ao aprovar, o servidor grava `APPROVED` no banco e renova o token HMAC na mesma transação. O estado sincronizado avança para `NEEDS_CHARACTER_CREATION`, e `SESSION_CREDENTIALS` substitui as credenciais no navegador. O token provisório anterior deixa de ser aceito para um novo `joinById`.
 
@@ -62,7 +62,7 @@ O banco padrão é `apps/server/dungeons.db`, com WAL, timeout de 5 segundos e c
 
 As tabelas em `apps/server/src/db/schema.ts` incluem `rooms`, `players`, `characters`, `sessions`, `maps`, `chambers`, `terrain_cells`, `walls`, `placed_objects`, `editor_history` e `_dungeons_migrations`. Datas usam milissegundos Unix. O Drizzle mantém seu controle nativo em `__drizzle_migrations`; o ledger do jogo registra a versão `0.1.0` e o checksum da migração inicial. A migração `0002` adiciona mapas e posições, e o seed transacional cria três câmaras conectadas quando não há mapas.
 
-A migração `0003_add_combat_system.sql` adiciona `monsters_catalog`, `combat_encounters`, `combat_participants` e `active_buffs`, com catálogo inicial e um encontro ativo por sala. HP/MP, participantes e turno são gravados na mesma transação SQLite. Encontros `ACTIVE` são carregados ao iniciar a sala e conciliados com a presença: personagens offline são retirados, e o encontro termina se não restar nenhum herói vivo participante. Durante uma reconexão dentro da tolerância, rodada, iniciativa e ações restantes são preservadas. Encontros encerrados ou concluídos por fuga não são retomados.
+A migração `0003_add_combat_system.sql` adiciona `monsters_catalog`, `combat_encounters`, `combat_participants` e `active_buffs`, com catálogo inicial e um encontro ativo por sala. HP/MP, participantes e turno são gravados na mesma transação SQLite. Encontros `ACTIVE` são carregados ao iniciar a sala e conciliados com a presença: a iniciativa e os participantes anteriores são preservados, e o combate fica pausado até o Mestre decidir a recuperação e despausar. Durante uma reconexão dentro da tolerância, rodada, iniciativa e ações restantes são preservadas. Encontros encerrados ou concluídos por fuga não são retomados.
 
 Para alterar a estrutura, edite `schema.ts`, rode `pnpm db:generate`, revise o SQL gerado e execute `pnpm db:migrate`. Versione os arquivos SQL e seus metadados. Não altere uma migração já aplicada: gere outra. Faça backup antes de mudanças que removam ou transformem dados.
 
@@ -90,8 +90,21 @@ O editor tem seleção e quatro camadas: Terreno, Paredes, Objetos e Entidades. 
 
 ## Fase 6 — manutenção do SQLite
 
-A migração `0005_finalize_mvp_schema.sql` prepara checkpoints de recuperação e índices de consulta. A gravação e a decisão de restauração pós-crash serão integradas no próximo incremento; acompanhe [o progresso da fase 6](Documents/fase6-progresso.md).
+A migração `0005_finalize_mvp_schema.sql` prepara checkpoints de recuperação e índices de consulta. Checkpoints transacionais e a decisão de restauração pós-crash já estão integrados; acompanhe [o progresso da fase 6](Documents/fase6-progresso.md).
 
 O banco usa WAL com `synchronous=NORMAL` por padrão. Configure `DB_SYNCHRONOUS=FULL` no ambiente do host para maior durabilidade contra perda de energia. Valores diferentes de NORMAL/FULL são rejeitados.
 
 Com o host parado, rode `pnpm db:sanitize` para consolidar o WAL e verificar integridade. O comando respeita `DATABASE_PATH`, não executa seeds, mantém fichas/inventários e dados de recuperação de sessões ativas, e remove somente sessões CLOSED expiradas (30 dias), checkpoints encerrados antigos, histórico explicitamente descartado e tokens de reconexão antigos. Histórico ainda disponível para Undo/Redo e tokens de sessão são preservados. Leitores que impedirem TRUNCATE ou erros de integridade produzem saída com código 1.
+
+
+## Áudio, PWA e validação da fase 6
+
+O painel **Áudio** controla volume geral, música, efeitos e silêncio, com preferências salvas no navegador. O primeiro toque libera o som; o Mestre pode enviar Trovão e Porta Pesada para todos. `pnpm audio:build` regenera os assets originais.
+
+Em HTTPS ou localhost, o aplicativo oferece instalação standalone e cache de assets. A interface pode abrir offline; a partida exige o servidor. Atualizações são oferecidas por aviso e ficam bloqueadas durante combate. Depois de queda do host, o cliente tenta reconectar e o Mestre decide restaurar ou descartar a sessão. A restauração preserva o turno e começa pausada. **Encerrar Sessão** fecha o combate e elimina o marcador de recuperação.
+
+`pnpm test:lighthouse` audita a versão compilada com um banco descartável na porta 4179 (deixe essa porta livre). O relatório fica em `.local/lighthouse-phase6.json`. `CHROME_PATH` é opcional; o padrão usa Chromium do Playwright. A meta de performance é 90. A versão atual do Lighthouse não inclui a antiga categoria PWA; manifesto, Service Worker e cache são verificados no Playwright.
+
+Consulte o [roteiro de testes manuais](Documents/fase6-testes-manuais.md) para dispositivos físicos e recuperação.
+
+Resultados e limites de aceite: [validação da fase 6](Documents/fase6-validacao.md). A implementação está pronta para a Mesa Zero; essa sessão humana não foi realizada nesta execução.

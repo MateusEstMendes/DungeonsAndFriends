@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFileSync } from 'node:fs';
 
 test('master places new enemies and the arena loads their supplied artwork', async ({ browser }) => {
@@ -40,10 +40,11 @@ test('master places new enemies and the arena loads their supplied artwork', asy
     for (const name of ['Slime', 'Golem de Pedra', 'Dragão Jovem']) {
       await expect(player.getByRole('button', { name: new RegExp(`^${name} `) })).toBeVisible();
     }
-    await gm.screenshot({ path: '.local/enemies-arena.png', animations: 'disabled' });
+    await gm.screenshot({ timeout: 60_000, path: '.local/enemies-arena.png', animations: 'disabled' });
     expect(errors).toEqual([]); expect(missing).toEqual([]);
     await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).click();
-    await expect(gm.getByRole('region', { name: 'Mesa de aventura', exact: true })).toBeVisible();
+    await gm.bringToFront();
+    await expect(gm.getByRole('region', { name: 'Mesa de aventura', exact: true })).toBeVisible({ timeout: 60_000 });
     await player.getByRole('button', { name: 'Sair', exact: true }).click();
     await gm.getByRole('button', { name: 'Sair', exact: true }).click();
   } finally { await playerContext.close(); await gmContext.close(); }

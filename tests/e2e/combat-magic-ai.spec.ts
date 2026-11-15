@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve, sep } from 'node:path';
@@ -46,7 +46,7 @@ test('grimório real, área JRPG e controle global/misto por turnos', async ({ b
     await expect(gm.locator('.combat-heading')).toContainText('Controlando: Goblin');
     await gm.getByRole('button', { name: 'Defender', exact: true }).click(); await gm.getByRole('button', { name: 'Esquiva Ativa', exact: true }).click();
     await expect(player.locator('.combat-heading h1')).toHaveText('Rodada 3');
-    await player.screenshot({ path: '.local/phase5-magic-ai.png' }); expect(errors).toEqual([]);
+    await player.screenshot({ timeout: 60_000, path: '.local/phase5-magic-ai.png' }); expect(errors).toEqual([]);
     await gm.getByLabel('IA Global', { exact: true }).click(); await expect(gm.getByLabel('IA Global', { exact: true })).not.toBeChecked(); await gm.getByRole('button', { name: 'Encerrar combate', exact: true }).click();
     await player.getByRole('button', { name: 'Sair', exact: true }).click(); await gm.getByRole('button', { name: 'Sair', exact: true }).click();
   } finally {

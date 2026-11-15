@@ -1,0 +1,28 @@
+name: Phase 6 validation
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.16.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm test:e2e
+      - run: pnpm test:lighthouse
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase6-reports
+          include-hidden-files: true
+          path: |
+            .local/lighthouse-phase6.json
+            test-results/
